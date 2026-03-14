@@ -17,7 +17,7 @@ import {
 describe('getPlatform', () => {
   it('returns a valid platform string', () => {
     const result = getPlatform();
-    expect(['macos', 'linux', 'unknown']).toContain(result);
+    expect(['macos', 'linux', 'windows', 'unknown']).toContain(result);
   });
 });
 
