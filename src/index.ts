@@ -462,7 +462,37 @@ function ensureContainerSystemRunning(): void {
   cleanupOrphans();
 }
 
+const PID_FILE = path.join(process.cwd(), 'nanoclaw.pid');
+
+function writePidFile(): void {
+  fs.writeFileSync(PID_FILE, String(process.pid), 'utf8');
+}
+
+function removePidFile(): void {
+  try {
+    fs.unlinkSync(PID_FILE);
+  } catch {
+    // ignore if already gone
+  }
+}
+
 async function main(): Promise<void> {
+  // Kill any previous instance using the PID file
+  if (fs.existsSync(PID_FILE)) {
+    const oldPid = parseInt(fs.readFileSync(PID_FILE, 'utf8').trim(), 10);
+    if (oldPid && oldPid !== process.pid) {
+      try {
+        process.kill(oldPid, 'SIGTERM');
+        logger.info({ oldPid }, 'Sent SIGTERM to previous instance');
+        // Give it a moment to shut down before we take over
+        await new Promise((r) => setTimeout(r, 2000));
+      } catch {
+        // process already gone
+      }
+    }
+  }
+  writePidFile();
+
   ensureContainerSystemRunning();
   initDatabase();
   logger.info('Database initialized');
@@ -471,6 +501,7 @@ async function main(): Promise<void> {
   // Graceful shutdown handlers
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'Shutdown signal received');
+    removePidFile();
     await queue.shutdown(10000);
     for (const ch of channels) await ch.disconnect();
     process.exit(0);

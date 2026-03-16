@@ -99,7 +99,9 @@ export class WhatsAppChannel implements Channel {
         const reason = (
           lastDisconnect?.error as { output?: { statusCode?: number } }
         )?.output?.statusCode;
-        const shouldReconnect = reason !== DisconnectReason.loggedOut;
+        const isLoggedOut = reason === DisconnectReason.loggedOut;
+        const isConflict = reason === DisconnectReason.connectionReplaced;
+        const shouldReconnect = !isLoggedOut && !isConflict;
         logger.info(
           {
             reason,
@@ -119,6 +121,15 @@ export class WhatsAppChannel implements Channel {
               });
             }, 5000);
           });
+        } else if (isConflict) {
+          logger.warn(
+            'WhatsApp conflict: another web session connected. Waiting 30s before reconnecting.',
+          );
+          setTimeout(() => {
+            this.connectInternal().catch((err) => {
+              logger.error({ err }, 'Reconnect after conflict failed');
+            });
+          }, 30000);
         } else {
           logger.info('Logged out. Run /setup to re-authenticate.');
           process.exit(0);
