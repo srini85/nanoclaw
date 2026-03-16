@@ -13,6 +13,8 @@ import {
   DATA_DIR,
   GROUPS_DIR,
   IDLE_TIMEOUT,
+  MODEL_INTERACTIVE,
+  MODEL_SCHEDULED,
   TIMEZONE,
 } from './config.js';
 import { readEnvFile } from './env.js';
@@ -225,11 +227,15 @@ function readSecrets(): Record<string, string> {
 function buildContainerArgs(
   mounts: VolumeMount[],
   containerName: string,
+  model: string,
 ): string[] {
   const args: string[] = ['run', '-i', '--rm', '--name', containerName];
 
   // Pass host timezone so container's local time matches the user's
   args.push('-e', `TZ=${TIMEZONE}`);
+
+  // Select model based on task type
+  args.push('-e', `ANTHROPIC_MODEL=${model}`);
 
   // Pass Outlook/Microsoft Graph credentials if configured
   const outlookEnv = readEnvFile([
@@ -285,7 +291,8 @@ export async function runContainerAgent(
   const mounts = buildVolumeMounts(group, input.isMain);
   const safeName = group.folder.replace(/[^a-zA-Z0-9-]/g, '-');
   const containerName = `nanoclaw-${safeName}-${Date.now()}`;
-  const containerArgs = buildContainerArgs(mounts, containerName);
+  const model = input.isScheduledTask ? MODEL_SCHEDULED : MODEL_INTERACTIVE;
+  const containerArgs = buildContainerArgs(mounts, containerName, model);
 
   logger.debug(
     {

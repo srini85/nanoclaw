@@ -43,6 +43,12 @@ export const DATA_DIR = path.resolve(PROJECT_ROOT, 'data');
 
 export const CONTAINER_IMAGE =
   process.env.CONTAINER_IMAGE || 'nanoclaw-agent:latest';
+
+// Model selection: scheduled tasks use a cheaper model, interactive uses the default
+export const MODEL_INTERACTIVE =
+  process.env.MODEL_INTERACTIVE || 'claude-sonnet-4-6';
+export const MODEL_SCHEDULED =
+  process.env.MODEL_SCHEDULED || 'claude-haiku-4-5-20251001';
 export const CONTAINER_TIMEOUT = parseInt(
   process.env.CONTAINER_TIMEOUT || '1800000',
   10,
