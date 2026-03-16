@@ -238,7 +238,12 @@ function buildContainerArgs(
     'MICROSOFT_TENANT_ID',
     'MICROSOFT_REFRESH_TOKEN',
   ]);
-  for (const key of ['MICROSOFT_CLIENT_ID', 'MICROSOFT_CLIENT_SECRET', 'MICROSOFT_TENANT_ID', 'MICROSOFT_REFRESH_TOKEN']) {
+  for (const key of [
+    'MICROSOFT_CLIENT_ID',
+    'MICROSOFT_CLIENT_SECRET',
+    'MICROSOFT_TENANT_ID',
+    'MICROSOFT_REFRESH_TOKEN',
+  ]) {
     const val = process.env[key] || outlookEnv[key];
     if (val) args.push('-e', `${key}=${val}`);
   }

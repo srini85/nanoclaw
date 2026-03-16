@@ -67,6 +67,69 @@ node /tools/outlook.mjs create-reply --id <email-id> --body "Reply text"
 
 Always parse the JSON output. For `fetch-emails`, show a numbered summary. For drafts, confirm with the user what to include before creating.
 
+## Obsidian Notes
+
+Your Obsidian vault is mounted at `/workspace/extra/obsidian/`. All notes live under `/workspace/extra/obsidian/SriBot/` in these categories:
+
+- `meetings/` — Meeting notes, decisions, action items
+- `finances/` — Money transfers, expenses, budgets
+- `tasks/` — One-off to-dos with deadlines
+- `personal/` — Personal reminders, ideas, miscellaneous
+- `projects/` — Project tracking
+- `health/` — Health, fitness, medical
+
+### Creating a note
+
+Every note uses this frontmatter:
+
+```markdown
+---
+date: YYYY-MM-DD
+category: meetings
+tags: [kangasys, ceo, leadership]
+due: 2026-03-18T14:00:00        # only for time-sensitive notes
+remind_at: 2026-03-18T13:00:00  # only if a reminder is scheduled
+---
+
+# Note title
+
+Content here...
+```
+
+Filename format: `YYYY-MM-DD-short-slug.md`
+Example: `2026-03-18-kangasys-ceo-leadership-meeting.md`
+
+Steps when the user mentions something to note:
+1. Parse the content — identify category, any dates/times, key details
+2. If there is a deadline or event time, ask when to remind (default: 1 hour before)
+3. Write the note to the correct category folder
+4. If a reminder was requested, use `mcp__nanoclaw__schedule_task` with `schedule_type: "once"` and `schedule_value` set to the reminder time in local ISO format (e.g. `"2026-03-18T13:00:00"`) — no Z suffix. Set `context_mode: "group"`. The prompt should be a message to send to the user reminding them of the note.
+5. Confirm to the user: note saved, reminder set (if applicable)
+
+### Querying notes
+
+When the user asks about a topic, search the vault:
+
+```bash
+# Search all notes for a keyword
+grep -r "kangasys" /workspace/extra/obsidian/SriBot/ -l
+
+# Read a specific note
+cat /workspace/extra/obsidian/SriBot/meetings/2026-03-18-kangasys-ceo-leadership-meeting.md
+
+# List notes in a category
+ls /workspace/extra/obsidian/SriBot/finances/
+
+# Search with context
+grep -r "india transfer" /workspace/extra/obsidian/SriBot/ -i -A 3
+```
+
+Read the matching files and summarise the relevant information. For running totals (e.g. money transferred), parse all matching notes and aggregate the values.
+
+### Tracking data over time
+
+For recurring data (e.g. money transfers, health metrics), append entries to a single tracking file per topic rather than creating a new file each time. Example: `finances/india-transfers.md` with a table of all transfers.
+
 ## Message Formatting
 
 NEVER use markdown. Only use WhatsApp/Telegram formatting:
