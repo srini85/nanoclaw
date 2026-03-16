@@ -47,6 +47,26 @@ When you learn something important:
 - Split files larger than 500 lines into folders
 - Keep an index in your memory for the files you create
 
+## Outlook Email
+
+Read emails and create drafts via Microsoft Graph API:
+
+```bash
+# Fetch last 10 emails (returns JSON with id, subject, from, preview)
+node /tools/outlook.mjs fetch-emails [count]
+
+# Get full email body by ID
+node /tools/outlook.mjs get-email <id>
+
+# Create a new draft (NOT sent — saved to Drafts folder)
+node /tools/outlook.mjs create-draft --to "person@example.com" --subject "Subject" --body "Body text"
+
+# Create a reply draft to an existing email (NOT sent)
+node /tools/outlook.mjs create-reply --id <email-id> --body "Reply text"
+```
+
+Always parse the JSON output. For `fetch-emails`, show a numbered summary. For drafts, confirm with the user what to include before creating.
+
 ## Message Formatting
 
 NEVER use markdown. Only use WhatsApp/Telegram formatting:

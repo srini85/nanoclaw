@@ -48,6 +48,9 @@ COPY agent-runner/ ./
 # Build TypeScript
 RUN npm run build
 
+# Copy tools (available to agent via bash at /tools/)
+COPY tools/ /tools/
+
 # Create workspace directories
 RUN mkdir -p /workspace/group /workspace/global /workspace/extra /workspace/ipc/messages /workspace/ipc/tasks /workspace/ipc/input
 
