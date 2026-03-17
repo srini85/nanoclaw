@@ -254,6 +254,13 @@ function buildContainerArgs(
     if (val) args.push('-e', `${key}=${val}`);
   }
 
+  // Pass Jira credentials if configured
+  const jiraEnv = readEnvFile(['JIRA_URL', 'JIRA_EMAIL', 'JIRA_API_TOKEN']);
+  for (const key of ['JIRA_URL', 'JIRA_EMAIL', 'JIRA_API_TOKEN']) {
+    const val = process.env[key] || jiraEnv[key];
+    if (val) args.push('-e', `${key}=${val}`);
+  }
+
   // Run as host user so bind-mounted files are accessible.
   // Skip when running as root (uid 0), as the container's node user (uid 1000),
   // or when getuid is unavailable (native Windows without WSL).

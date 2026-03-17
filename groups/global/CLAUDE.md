@@ -130,6 +130,41 @@ Read the matching files and summarise the relevant information. For running tota
 
 For recurring data (e.g. money transfers, health metrics), append entries to a single tracking file per topic rather than creating a new file each time. Example: `finances/india-transfers.md` with a table of all transfers.
 
+## Jira
+
+Read and manage Jira tickets via the REST API:
+
+```bash
+# View a ticket
+node /tools/jira.mjs get-issue PROJECT-123
+
+# Search tickets (JQL)
+node /tools/jira.mjs search --jql "project = PROJ AND status = 'In Progress'" --max 20
+
+# Create a ticket
+node /tools/jira.mjs create-issue --project PROJ --type Task --summary "Fix login bug" --description "Steps to reproduce..."
+
+# Update fields on a ticket
+node /tools/jira.mjs update-issue PROJECT-123 --summary "New title" --description "Updated details"
+
+# List available status transitions
+node /tools/jira.mjs get-transitions PROJECT-123
+
+# Move a ticket to a new status
+node /tools/jira.mjs transition-issue PROJECT-123 --transition "In Progress"
+
+# View comments
+node /tools/jira.mjs get-comments PROJECT-123
+
+# Add a comment
+node /tools/jira.mjs add-comment PROJECT-123 --body "Investigated and found the root cause..."
+
+# Update an existing comment
+node /tools/jira.mjs update-comment PROJECT-123 --comment-id 12345 --body "Updated comment text"
+```
+
+Always parse the JSON output. When showing tickets to the user, include key, summary, status, and URL. For searches, show a numbered list. Before creating or updating, confirm the details with the user.
+
 ## Message Formatting
 
 NEVER use markdown. Only use WhatsApp/Telegram formatting:
