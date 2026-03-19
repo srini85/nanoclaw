@@ -108,23 +108,30 @@ Steps when the user mentions something to note:
 
 ### Querying notes
 
-When the user asks about a topic, search the vault:
+Use the FTS search tool — it returns only matching paths + snippets, then you read only the relevant files. This is far more efficient than grep.
 
 ```bash
-# Search all notes for a keyword
-grep -r "kangasys" /workspace/extra/obsidian/SriBot/ -l
+# Search for notes matching a topic (returns JSON with path, title, snippet)
+node /tools/obsidian-search.mjs search "kangasys meeting"
 
-# Read a specific note
-cat /workspace/extra/obsidian/SriBot/meetings/2026-03-18-kangasys-ceo-leadership-meeting.md
+# Limit results (default is 5)
+node /tools/obsidian-search.mjs search "india transfer" --limit 3
 
-# List notes in a category
-ls /workspace/extra/obsidian/SriBot/finances/
-
-# Search with context
-grep -r "india transfer" /workspace/extra/obsidian/SriBot/ -i -A 3
+# Force rebuild index (rarely needed — auto-rebuilds if stale)
+node /tools/obsidian-search.mjs index
 ```
 
-Read the matching files and summarise the relevant information. For running totals (e.g. money transferred), parse all matching notes and aggregate the values.
+**Workflow:**
+1. Run the search command — parse the JSON output
+2. Read only the `fullPath` files from the top 1-3 results
+3. Summarise the relevant information to the user
+
+For running totals (e.g. money transferred), read all matching files and aggregate the values.
+
+**Fallback:** If the search returns no results, try broader terms or a category listing:
+```bash
+ls /workspace/extra/obsidian/SriBot/finances/
+```
 
 ### Tracking data over time
 
