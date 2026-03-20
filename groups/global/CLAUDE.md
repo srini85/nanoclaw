@@ -103,12 +103,42 @@ Steps when the user mentions something to note:
 1. Parse the content — identify category, any dates/times, key details
 2. If there is a deadline or event time, ask when to remind (default: 1 hour before)
 3. Write the note to the correct category folder
-4. If a reminder was requested, use `mcp__nanoclaw__schedule_task` with `schedule_type: "once"` and `schedule_value` set to the reminder time in local ISO format (e.g. `"2026-03-18T13:00:00"`) — no Z suffix. Set `context_mode: "group"`. The prompt should be a message to send to the user reminding them of the note.
+4. If a reminder was requested, use `mcp__nanoclaw__schedule_task` with `schedule_type: "once"` and `schedule_value` set to the reminder time in local ISO format (e.g. `"2026-03-18T13:00:00"`) — no Z suffix. Set `context_mode: "group"`. The prompt should be a message to send to the user reminding them of the note, followed by the follow-up instruction below.
 5. Confirm to the user: note saved, reminder set (if applicable)
+
+### Reminder follow-up policy
+
+All times below are **Sydney time (AEDT/AEST)**. The snooze window is 11 PM – 7 AM Sydney time — no reminders during this window.
+
+When you fire a reminder, after sending the message to the user:
+
+1. **Check recent conversation history** (last 8 hours) for any sign the action was already done — e.g. the user said "done", "sorted", "I did it", or the topic was discussed and resolved.
+2. **If clearly actioned**: Do nothing further. The reminder cycle is complete.
+3. **If not clearly actioned**: Schedule a follow-up using `mcp__nanoclaw__schedule_task`.
+
+**Calculating the follow-up time (Sydney time):**
+- Add 4 hours to the current Sydney time.
+- **Snooze window:** If the result falls between 23:00 and 07:00 Sydney time, push it forward to 07:00 Sydney time that morning (if currently before 7 AM) or 07:00 Sydney time the next morning (if currently after 11 PM).
+- Use local ISO format, no Z suffix.
+
+**Follow-up task prompt to use** (fill in `[ACTION]` with the original reminder):
+```
+Follow-up reminder: [ACTION]
+
+Check recent conversation history for the past 8 hours. If the user has confirmed this is done, do nothing. If not done:
+1. Send the user: "Just checking — did you get a chance to [ACTION]? Reply *done* to clear it, or tell me a new time to reschedule."
+2. Schedule another follow-up in 4 hours Sydney time (skip 11 PM–7 AM Sydney snooze window).
+```
+
+**What to tell the user** when re-sending: Keep it brief — state the reminder and offer to reschedule or mark done. Do not repeat the full follow-up instructions aloud.
+
+This cycle continues every 4 hours (during 7 AM–11 PM Sydney time) until the user confirms it's done or explicitly cancels.
 
 ### Querying notes
 
-Use the FTS search tool — it returns only matching paths + snippets, then you read only the relevant files. This is far more efficient than grep.
+**IMPORTANT: NEVER use `grep` to search Obsidian notes. Always use `obsidian-search.mjs`.**
+
+The FTS search tool is available at `/tools/obsidian-search.mjs`. It returns only ranked paths + snippets — you then read only the top 1-3 matching files. This keeps your context small and responses fast.
 
 ```bash
 # Search for notes matching a topic (returns JSON with path, title, snippet)
@@ -121,17 +151,19 @@ node /tools/obsidian-search.mjs search "india transfer" --limit 3
 node /tools/obsidian-search.mjs index
 ```
 
-**Workflow:**
-1. Run the search command — parse the JSON output
-2. Read only the `fullPath` files from the top 1-3 results
+**Workflow — always follow this:**
+1. Run `node /tools/obsidian-search.mjs search "..."` — parse the JSON array
+2. Read only the `fullPath` files from the top 1-3 results (do NOT read all files)
 3. Summarise the relevant information to the user
 
-For running totals (e.g. money transferred), read all matching files and aggregate the values.
+For running totals (e.g. money transferred), read all matching `fullPath` files and aggregate the values.
 
-**Fallback:** If the search returns no results, try broader terms or a category listing:
+**Fallback:** If the search returns `"results": []`, try broader terms or list a category:
 ```bash
 ls /workspace/extra/obsidian/SriBot/finances/
 ```
+
+Do not fall back to `grep`. If obsidian-search returns nothing, tell the user no notes were found.
 
 ### Tracking data over time
 
@@ -171,6 +203,73 @@ node /tools/jira.mjs update-comment PROJECT-123 --comment-id 12345 --body "Updat
 ```
 
 Always parse the JSON output. When showing tickets to the user, include key, summary, status, and URL. For searches, show a numbered list. Before creating or updating, confirm the details with the user.
+
+## Creating Documents
+
+When the user asks you to **create a document** (policy, report, proposal, procedure, plan, etc.) using the KangaSys template, use the ODT generator:
+
+**Template location:** `/workspace/extra/obsidian/SriBot/_resources/KangaSysTemplate.odt`
+**Script location:** `/workspace/extra/obsidian/SriBot/_resources/create-odt.py`
+**Full instructions:** `/workspace/extra/obsidian/SriBot/_resources/create-odt-instructions.md`
+
+### Steps
+
+1. **Build the content JSON** — write a `/tmp/doc-content.json` with this structure:
+
+```json
+{
+  "title": "Document Title",
+  "description": "Short description for footer",
+  "version": "1.0",
+  "date": "March 2026",
+  "author": "Author Name",
+  "sections": [
+    {
+      "heading": "1. Section Name",
+      "level": 1,
+      "paragraphs": ["Paragraph text here."],
+      "items": ["Optional bullet point"],
+      "subsections": [
+        {
+          "heading": "1.1 Sub-section",
+          "level": 2,
+          "paragraphs": ["Sub-section content."]
+        }
+      ]
+    }
+  ]
+}
+```
+
+2. **Run the generator** (add `--pdf` if the user wants a PDF too):
+
+```bash
+# ODT only
+python3 /workspace/extra/obsidian/SriBot/_resources/create-odt.py \
+  --template /workspace/extra/obsidian/SriBot/_resources/KangaSysTemplate.odt \
+  --output   /workspace/extra/obsidian/SriBot/documents/DocumentName_v1.0.odt \
+  --content  /tmp/doc-content.json
+
+# ODT + PDF (use this when user asks for a PDF or Word doc)
+python3 /workspace/extra/obsidian/SriBot/_resources/create-odt.py \
+  --template /workspace/extra/obsidian/SriBot/_resources/KangaSysTemplate.odt \
+  --output   /workspace/extra/obsidian/SriBot/documents/DocumentName_v1.0.odt \
+  --content  /tmp/doc-content.json \
+  --pdf
+```
+
+The `--pdf` flag converts the ODT to PDF via LibreOffice headless. The PDF is saved alongside the ODT with the same name and a `.pdf` extension.
+
+3. **Tell the user** the file(s) have been created and their location in the vault. If both ODT and PDF were created, mention both paths.
+
+### What the template provides
+- KangaSys logo in the header (auto-applied)
+- Footer with document title + version number
+- A4 page, Aptos Display font, navy headings (#0f4761)
+- Title style, Heading 1 (20pt), Heading 2 (16pt), Heading 3 (14pt), Normal body text
+
+### Output folder
+Save documents to `/workspace/extra/obsidian/SriBot/documents/` unless the user specifies another location. Use the format `DocumentName_v1.0.odt`.
 
 ## Message Formatting
 
