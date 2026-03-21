@@ -1,6 +1,10 @@
+import fs from 'fs';
+import https from 'https';
+import path from 'path';
+
 import { Api, Bot } from 'grammy';
 
-import { ASSISTANT_NAME, TRIGGER_PATTERN } from '../config.js';
+import { ASSISTANT_NAME, DATA_DIR, TRIGGER_PATTERN } from '../config.js';
 import { readEnvFile } from '../env.js';
 import { logger } from '../logger.js';
 import { registerChannel, ChannelOpts } from './registry.js';
@@ -10,6 +14,33 @@ import {
   OnInboundMessage,
   RegisteredGroup,
 } from '../types.js';
+
+const MEDIA_DIR = path.join(DATA_DIR, 'media');
+
+/** Download a URL to a local file. Returns the local path on success, null on failure. */
+async function downloadFile(url: string, destPath: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    fs.mkdirSync(path.dirname(destPath), { recursive: true });
+    const file = fs.createWriteStream(destPath);
+    https
+      .get(url, (res) => {
+        if (res.statusCode !== 200) {
+          file.close();
+          fs.unlink(destPath, () => {});
+          resolve(false);
+          return;
+        }
+        res.pipe(file);
+        file.on('finish', () => { file.close(); resolve(true); });
+      })
+      .on('error', (err) => {
+        file.close();
+        fs.unlink(destPath, () => {});
+        logger.warn({ err: err.message }, 'Telegram media download error');
+        resolve(false);
+      });
+  });
+}
 
 export interface TelegramChannelOpts {
   onMessage: OnInboundMessage;
@@ -220,48 +251,108 @@ export class TelegramChannel implements Channel {
       );
     });
 
-    // Handle non-text messages with placeholders so the agent knows something was sent
-    const storeNonText = (ctx: any, placeholder: string) => {
+    // Build common message context from a ctx object
+    const msgContext = (ctx: any) => {
       const chatJid = `tg:${ctx.chat.id}`;
       const group = this.opts.registeredGroups()[chatJid];
-      if (!group) return;
-
       const timestamp = new Date(ctx.message.date * 1000).toISOString();
       const senderName =
         ctx.from?.first_name ||
         ctx.from?.username ||
         ctx.from?.id?.toString() ||
         'Unknown';
-      const caption = ctx.message.caption ? ` ${ctx.message.caption}` : '';
-
       const isGroup =
         ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
-      this.opts.onChatMetadata(
-        chatJid,
-        timestamp,
-        undefined,
-        'telegram',
-        isGroup,
-      );
+      return { chatJid, group, timestamp, senderName, isGroup };
+    };
+
+    // Emit metadata + message. attachment is the local file path (if downloaded).
+    const storeMessage = (
+      ctx: any,
+      content: string,
+      attachment?: string,
+    ) => {
+      const { chatJid, group, timestamp, senderName, isGroup } = msgContext(ctx);
+      if (!group) return;
+      this.opts.onChatMetadata(chatJid, timestamp, undefined, 'telegram', isGroup);
       this.opts.onMessage(chatJid, {
         id: ctx.message.message_id.toString(),
         chat_jid: chatJid,
         sender: ctx.from?.id?.toString() || '',
         sender_name: senderName,
-        content: `${placeholder}${caption}`,
+        content,
         timestamp,
         is_from_me: false,
+        ...(attachment ? { attachment } : {}),
       });
     };
 
-    this.bot.on('message:photo', (ctx) => storeNonText(ctx, '[Photo]'));
+    // Download a Telegram file by file_id and return the local path, or null on failure.
+    const downloadTgFile = async (
+      fileId: string,
+      ext: string,
+      msgId: string,
+    ): Promise<string | null> => {
+      try {
+        const token = readEnvFile(['TELEGRAM_BOT_TOKEN']).TELEGRAM_BOT_TOKEN;
+        if (!token) return null;
+        const fileInfo = await this.bot!.api.getFile(fileId);
+        if (!fileInfo.file_path) return null;
+        const url = `https://api.telegram.org/file/bot${token}/${fileInfo.file_path}`;
+        const destPath = path.join(MEDIA_DIR, `${msgId}${ext}`);
+        const ok = await downloadFile(url, destPath);
+        return ok ? destPath : null;
+      } catch (err: any) {
+        logger.warn({ err: err.message }, 'Failed to download Telegram file');
+        return null;
+      }
+    };
+
+    // Photos — download the highest-resolution version
+    this.bot.on('message:photo', async (ctx) => {
+      const { group } = msgContext(ctx);
+      if (!group) return;
+      const caption = ctx.message.caption ? ` ${ctx.message.caption}` : '';
+      // photos array is sorted smallest→largest; take the last (largest)
+      const photos = ctx.message.photo;
+      const best = photos[photos.length - 1];
+      const msgId = ctx.message.message_id.toString();
+      const localPath = await downloadTgFile(best.file_id, '.jpg', `tg_photo_${msgId}`);
+      storeMessage(ctx, `[Photo]${caption}`, localPath ?? undefined);
+      if (localPath) {
+        logger.info({ path: localPath }, 'Telegram photo downloaded');
+      } else {
+        logger.warn({ msgId }, 'Telegram photo download failed — stored as placeholder');
+      }
+    });
+
+    // Documents (PDFs, images sent as files, etc.)
+    this.bot.on('message:document', async (ctx) => {
+      const { group } = msgContext(ctx);
+      if (!group) return;
+      const doc = ctx.message.document!;
+      const caption = ctx.message.caption ? ` ${ctx.message.caption}` : '';
+      const name = doc.file_name || 'file';
+      const ext = path.extname(name) || '';
+      const msgId = ctx.message.message_id.toString();
+      // Only attempt download for reasonably sized files (Telegram bot API cap: 20 MB)
+      const localPath = doc.file_size && doc.file_size > 20 * 1024 * 1024
+        ? null
+        : await downloadTgFile(doc.file_id, ext, `tg_doc_${msgId}`);
+      storeMessage(ctx, `[Document: ${name}]${caption}`, localPath ?? undefined);
+    });
+
+    // Non-downloadable / non-actionable media — store as placeholder text only
+    const storeNonText = (ctx: any, placeholder: string) => {
+      const { group } = msgContext(ctx);
+      if (!group) return;
+      const caption = ctx.message.caption ? ` ${ctx.message.caption}` : '';
+      storeMessage(ctx, `${placeholder}${caption}`);
+    };
+
     this.bot.on('message:video', (ctx) => storeNonText(ctx, '[Video]'));
     this.bot.on('message:voice', (ctx) => storeNonText(ctx, '[Voice message]'));
     this.bot.on('message:audio', (ctx) => storeNonText(ctx, '[Audio]'));
-    this.bot.on('message:document', (ctx) => {
-      const name = ctx.message.document?.file_name || 'file';
-      storeNonText(ctx, `[Document: ${name}]`);
-    });
     this.bot.on('message:sticker', (ctx) => {
       const emoji = ctx.message.sticker?.emoji || '';
       storeNonText(ctx, `[Sticker ${emoji}]`);

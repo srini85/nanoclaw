@@ -204,6 +204,29 @@ node /tools/jira.mjs update-comment PROJECT-123 --comment-id 12345 --body "Updat
 
 Always parse the JSON output. When showing tickets to the user, include key, summary, status, and URL. For searches, show a numbered list. Before creating or updating, confirm the details with the user.
 
+## Receiving Images and Files
+
+When a message contains an `attachment` attribute in the XML, the file has been downloaded and is available at that path inside the container under `/workspace/media/`.
+
+```xml
+<message sender="Srini" time="9:00 AM" attachment="/workspace/media/tg_photo_12345.jpg">[Photo] Check this out</message>
+```
+
+**When you see an attachment:**
+1. Read the file at the given path using the Read tool or Bash
+2. For images (`.jpg`, `.png`, `.gif`, `.webp`): read the file — Claude has vision and can see its contents
+3. For documents (`.pdf`): use `pdftotext` or read directly if it's a text-based file
+4. For other files: read or inspect as appropriate
+
+**Storing images in notes:**
+If the user wants an image saved to their Obsidian vault, copy it:
+```bash
+cp /workspace/media/tg_photo_12345.jpg /workspace/extra/obsidian/SriBot/attachments/
+```
+Then reference it in the note with the Obsidian attachment syntax: `![[tg_photo_12345.jpg]]`
+
+Create the `attachments/` folder if it doesn't exist.
+
 ## Creating Documents
 
 When the user asks you to **create a document** (policy, report, proposal, procedure, plan, etc.) using the KangaSys template, use the ODT generator:

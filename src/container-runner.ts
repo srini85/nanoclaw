@@ -177,6 +177,15 @@ function buildVolumeMounts(
     readonly: false,
   });
 
+  // Media directory: downloaded images and documents from Telegram (read-only in container)
+  const mediaDir = path.join(DATA_DIR, 'media');
+  fs.mkdirSync(mediaDir, { recursive: true });
+  mounts.push({
+    hostPath: mediaDir,
+    containerPath: '/workspace/media',
+    readonly: true,
+  });
+
   // Copy agent-runner source into a per-group writable location so agents
   // can customize it (add tools, change behavior) without affecting other
   // groups. Recompiled on container startup via entrypoint.sh.
