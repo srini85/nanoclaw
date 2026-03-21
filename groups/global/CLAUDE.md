@@ -218,6 +218,14 @@ When a message contains an `attachment` attribute in the XML, the file has been 
 3. For documents (`.pdf`): use `pdftotext` or read directly if it's a text-based file
 4. For other files: read or inspect as appropriate
 
+**Sending files back to the user:**
+Use `mcp__nanoclaw__send_file` to send a file through Telegram — do NOT just describe it in text. This works for images, PDFs, and any document.
+```
+send_file(file_path="/workspace/media/tg_photo_123.jpg", caption="Here's your image")
+send_file(file_path="/workspace/extra/obsidian/SriBot/documents/Report_v1.0.pdf", caption="Report ready")
+```
+Always use `send_file` when the user asks you to show, return, or send an image or document.
+
 **Storing images in notes:**
 If the user wants an image saved to their Obsidian vault, copy it:
 ```bash

@@ -2,7 +2,7 @@ import fs from 'fs';
 import https from 'https';
 import path from 'path';
 
-import { Api, Bot } from 'grammy';
+import { Api, Bot, InputFile } from 'grammy';
 
 import { ASSISTANT_NAME, DATA_DIR, TRIGGER_PATTERN } from '../config.js';
 import { readEnvFile } from '../env.js';
@@ -31,7 +31,10 @@ async function downloadFile(url: string, destPath: string): Promise<boolean> {
           return;
         }
         res.pipe(file);
-        file.on('finish', () => { file.close(); resolve(true); });
+        file.on('finish', () => {
+          file.close();
+          resolve(true);
+        });
       })
       .on('error', (err) => {
         file.close();
@@ -267,14 +270,17 @@ export class TelegramChannel implements Channel {
     };
 
     // Emit metadata + message. attachment is the local file path (if downloaded).
-    const storeMessage = (
-      ctx: any,
-      content: string,
-      attachment?: string,
-    ) => {
-      const { chatJid, group, timestamp, senderName, isGroup } = msgContext(ctx);
+    const storeMessage = (ctx: any, content: string, attachment?: string) => {
+      const { chatJid, group, timestamp, senderName, isGroup } =
+        msgContext(ctx);
       if (!group) return;
-      this.opts.onChatMetadata(chatJid, timestamp, undefined, 'telegram', isGroup);
+      this.opts.onChatMetadata(
+        chatJid,
+        timestamp,
+        undefined,
+        'telegram',
+        isGroup,
+      );
       this.opts.onMessage(chatJid, {
         id: ctx.message.message_id.toString(),
         chat_jid: chatJid,
@@ -317,12 +323,19 @@ export class TelegramChannel implements Channel {
       const photos = ctx.message.photo;
       const best = photos[photos.length - 1];
       const msgId = ctx.message.message_id.toString();
-      const localPath = await downloadTgFile(best.file_id, '.jpg', `tg_photo_${msgId}`);
+      const localPath = await downloadTgFile(
+        best.file_id,
+        '.jpg',
+        `tg_photo_${msgId}`,
+      );
       storeMessage(ctx, `[Photo]${caption}`, localPath ?? undefined);
       if (localPath) {
         logger.info({ path: localPath }, 'Telegram photo downloaded');
       } else {
-        logger.warn({ msgId }, 'Telegram photo download failed — stored as placeholder');
+        logger.warn(
+          { msgId },
+          'Telegram photo download failed — stored as placeholder',
+        );
       }
     });
 
@@ -336,10 +349,15 @@ export class TelegramChannel implements Channel {
       const ext = path.extname(name) || '';
       const msgId = ctx.message.message_id.toString();
       // Only attempt download for reasonably sized files (Telegram bot API cap: 20 MB)
-      const localPath = doc.file_size && doc.file_size > 20 * 1024 * 1024
-        ? null
-        : await downloadTgFile(doc.file_id, ext, `tg_doc_${msgId}`);
-      storeMessage(ctx, `[Document: ${name}]${caption}`, localPath ?? undefined);
+      const localPath =
+        doc.file_size && doc.file_size > 20 * 1024 * 1024
+          ? null
+          : await downloadTgFile(doc.file_id, ext, `tg_doc_${msgId}`);
+      storeMessage(
+        ctx,
+        `[Document: ${name}]${caption}`,
+        localPath ?? undefined,
+      );
     });
 
     // Non-downloadable / non-actionable media — store as placeholder text only
@@ -381,6 +399,27 @@ export class TelegramChannel implements Channel {
         },
       });
     });
+  }
+
+  async sendFile(jid: string, filePath: string, caption?: string): Promise<void> {
+    if (!this.bot) {
+      logger.warn('Telegram bot not initialized');
+      return;
+    }
+    try {
+      const numericId = jid.replace(/^tg:/, '');
+      const ext = path.extname(filePath).toLowerCase();
+      const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+      const inputFile = new InputFile(filePath);
+      if (imageExts.includes(ext)) {
+        await this.bot.api.sendPhoto(numericId, inputFile, caption ? { caption } : {});
+      } else {
+        await this.bot.api.sendDocument(numericId, inputFile, caption ? { caption } : {});
+      }
+      logger.info({ jid, filePath }, 'Telegram file sent');
+    } catch (err) {
+      logger.error({ jid, filePath, err }, 'Failed to send Telegram file');
+    }
   }
 
   async sendMessage(jid: string, text: string): Promise<void> {

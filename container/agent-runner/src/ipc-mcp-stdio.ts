@@ -63,6 +63,29 @@ server.tool(
 );
 
 server.tool(
+  'send_file',
+  "Send a file (image, document, PDF, etc.) to the user or group. The file must exist at the given path inside the container. Use /workspace/media/ for downloaded attachments or any other accessible path. Prefer this over describing an image — actually send it.",
+  {
+    file_path: z.string().describe('Absolute path to the file inside the container (e.g., /workspace/media/tg_photo_123.jpg or /workspace/extra/obsidian/SriBot/documents/Report.pdf)'),
+    caption: z.string().optional().describe('Optional caption to send with the file'),
+  },
+  async (args) => {
+    const data: Record<string, string | undefined> = {
+      type: 'file',
+      chatJid,
+      filePath: args.file_path,
+      caption: args.caption || undefined,
+      groupFolder,
+      timestamp: new Date().toISOString(),
+    };
+
+    writeIpcFile(MESSAGES_DIR, data);
+
+    return { content: [{ type: 'text' as const, text: 'File queued for sending.' }] };
+  },
+);
+
+server.tool(
   'schedule_task',
   `Schedule a recurring or one-time task. The task will run as a full agent with access to all tools. Returns the task ID for future reference. To modify an existing task, use update_task instead.
 
