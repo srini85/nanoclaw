@@ -26,6 +26,58 @@ export interface IpcDeps {
   ) => void;
 }
 
+/**
+ * Translate a container-internal file path (e.g. /workspace/extra/obsidian/...)
+ * to the corresponding host path using the source group's mount configuration.
+ */
+function resolveContainerPath(
+  containerFilePath: string,
+  sourceGroup: string,
+  registeredGroups: Record<string, RegisteredGroup>,
+): string {
+  const groupEntry = Object.values(registeredGroups).find(
+    (g) => g.folder === sourceGroup,
+  );
+
+  const mappings: Array<{ containerPrefix: string; hostPrefix: string }> = [
+    {
+      containerPrefix: '/workspace/media',
+      hostPrefix: path.join(DATA_DIR, 'media'),
+    },
+    {
+      containerPrefix: '/workspace/group',
+      hostPrefix: path.join(DATA_DIR, 'sessions', sourceGroup),
+    },
+  ];
+
+  if (groupEntry?.containerConfig?.additionalMounts) {
+    for (const mount of groupEntry.containerConfig.additionalMounts) {
+      const containerName =
+        mount.containerPath || path.basename(mount.hostPath);
+      mappings.push({
+        containerPrefix: `/workspace/extra/${containerName}`,
+        hostPrefix: mount.hostPath,
+      });
+    }
+  }
+
+  for (const { containerPrefix, hostPrefix } of mappings) {
+    if (
+      containerFilePath === containerPrefix ||
+      containerFilePath.startsWith(containerPrefix + '/')
+    ) {
+      const relative = containerFilePath.slice(containerPrefix.length);
+      // Normalize separator for the host platform
+      return (
+        hostPrefix +
+        relative.split('/').join(path.sep)
+      );
+    }
+  }
+
+  return containerFilePath;
+}
+
 let ipcWatcherRunning = false;
 
 export function startIpcWatcher(deps: IpcDeps): void {
@@ -102,15 +154,33 @@ export function startIpcWatcher(deps: IpcDeps): void {
                     'Unauthorized IPC message attempt blocked',
                   );
                 }
-              } else if (data.type === 'file' && data.chatJid && data.filePath) {
+              } else if (
+                data.type === 'file' &&
+                data.chatJid &&
+                data.filePath
+              ) {
                 const targetGroup = registeredGroups[data.chatJid];
                 if (
                   isMain ||
                   (targetGroup && targetGroup.folder === sourceGroup)
                 ) {
-                  await deps.sendFile(data.chatJid, data.filePath, data.caption);
+                  const hostFilePath = resolveContainerPath(
+                    data.filePath,
+                    sourceGroup,
+                    registeredGroups,
+                  );
+                  await deps.sendFile(
+                    data.chatJid,
+                    hostFilePath,
+                    data.caption,
+                  );
                   logger.info(
-                    { chatJid: data.chatJid, filePath: data.filePath, sourceGroup },
+                    {
+                      chatJid: data.chatJid,
+                      containerPath: data.filePath,
+                      hostPath: hostFilePath,
+                      sourceGroup,
+                    },
                     'IPC file sent',
                   );
                 } else {
