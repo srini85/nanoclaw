@@ -8,6 +8,7 @@ import { sendPoolMessage } from './channels/telegram.js';
 import { AvailableGroup } from './container-runner.js';
 import { createTask, deleteTask, getTaskById, updateTask } from './db.js';
 import { isValidGroupFolder } from './group-folder.js';
+import { expandPath } from './mount-security.js';
 import { logger } from './logger.js';
 import { RegisteredGroup } from './types.js';
 
@@ -56,7 +57,7 @@ function resolveContainerPath(
         mount.containerPath || path.basename(mount.hostPath);
       mappings.push({
         containerPrefix: `/workspace/extra/${containerName}`,
-        hostPrefix: mount.hostPath,
+        hostPrefix: expandPath(mount.hostPath), // expands ${VAR} and ~
       });
     }
   }
@@ -68,10 +69,7 @@ function resolveContainerPath(
     ) {
       const relative = containerFilePath.slice(containerPrefix.length);
       // Normalize separator for the host platform
-      return (
-        hostPrefix +
-        relative.split('/').join(path.sep)
-      );
+      return hostPrefix + relative.split('/').join(path.sep);
     }
   }
 
@@ -169,11 +167,7 @@ export function startIpcWatcher(deps: IpcDeps): void {
                     sourceGroup,
                     registeredGroups,
                   );
-                  await deps.sendFile(
-                    data.chatJid,
-                    hostFilePath,
-                    data.caption,
-                  );
+                  await deps.sendFile(data.chatJid, hostFilePath, data.caption);
                   logger.info(
                     {
                       chatJid: data.chatJid,

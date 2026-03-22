@@ -118,18 +118,63 @@ export function loadMountAllowlist(): MountAllowlist | null {
   }
 }
 
-/**
- * Expand ~ to home directory and resolve to absolute path
- */
-function expandPath(p: string): string {
-  const homeDir = process.env.HOME || os.homedir();
-  if (p.startsWith('~/')) {
-    return path.join(homeDir, p.slice(2));
+// Lazily loaded .env file values for ${VAR} expansion (fallback to process.env)
+let envFileCache: Record<string, string> | null = null;
+
+function loadDotEnvVars(): Record<string, string> {
+  if (envFileCache !== null) return envFileCache;
+  envFileCache = {};
+  try {
+    const envPath = path.join(process.cwd(), '.env');
+    const content = fs.readFileSync(envPath, 'utf-8');
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eqIdx = trimmed.indexOf('=');
+      if (eqIdx === -1) continue;
+      const key = trimmed.slice(0, eqIdx).trim();
+      let value = trimmed.slice(eqIdx + 1).trim();
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
+      if (value) envFileCache[key] = value;
+    }
+  } catch {
+    // .env file not found — only process.env will be used
   }
-  if (p === '~') {
+  return envFileCache;
+}
+
+/**
+ * Expand ${ENV_VAR} references and ~ to home directory, then resolve to absolute path.
+ * Checks process.env first, then falls back to the project's .env file.
+ * Example: "${OBSIDIAN_PATH}/notes" → "/home/user/obsidian/notes"
+ */
+export function expandPath(p: string): string {
+  // Expand ${VAR_NAME} environment variable references
+  const dotEnv = loadDotEnvVars();
+  const withEnv = p.replace(/\$\{([^}]+)\}/g, (match, varName) => {
+    const val = process.env[varName] ?? dotEnv[varName];
+    if (val === undefined) {
+      logger.warn(
+        { varName, path: p },
+        'Environment variable not set in mount path — path will be invalid',
+      );
+    }
+    return val ?? '';
+  });
+
+  const homeDir = process.env.HOME || os.homedir();
+  if (withEnv.startsWith('~/')) {
+    return path.join(homeDir, withEnv.slice(2));
+  }
+  if (withEnv === '~') {
     return homeDir;
   }
-  return path.resolve(p);
+  return path.resolve(withEnv);
 }
 
 /**
