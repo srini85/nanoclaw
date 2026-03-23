@@ -139,13 +139,20 @@ Replace `{TIMESTAMP}` and `{HOSTNAME}` with actual values.
 
 ### 5. Create the zip
 
-**On Windows (Git Bash):** `zip` is not available — use PowerShell:
+**On Windows (Git Bash):** `zip` is not available — use .NET ZipFile via PowerShell (avoids Compress-Archive temp file locking issues):
 
 ```bash
-WIN_BACKUP_DIR=$(cygpath -w "${BACKUP_DIR}")
-WIN_ZIPFILE="C:\\Users\\${USERNAME}\\AppData\\Local\\Temp\\${BACKUP_NAME}.zip"
-powershell.exe -Command "Compress-Archive -Path '${WIN_BACKUP_DIR}' -DestinationPath '${WIN_ZIPFILE}' -Force"
+WIN_SRC=$(cygpath -w "${BACKUP_DIR}")
+WIN_DST=$(cygpath -w "/tmp/${BACKUP_NAME}.zip")
+cat > /tmp/do_zip.ps1 << EOF
+Add-Type -Assembly 'System.IO.Compression.FileSystem'
+\$level = [System.IO.Compression.CompressionLevel]::Optimal
+[System.IO.Compression.ZipFile]::CreateFromDirectory('${WIN_SRC}', '${WIN_DST}', \$level, \$true)
+Write-Output "Done"
+EOF
+powershell.exe -File "$(cygpath -w /tmp/do_zip.ps1)"
 ZIPFILE="/tmp/${BACKUP_NAME}.zip"
+rm -f /tmp/do_zip.ps1
 ```
 
 **On Linux/macOS:**
