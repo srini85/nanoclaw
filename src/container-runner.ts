@@ -211,6 +211,16 @@ function buildVolumeMounts(
     readonly: false,
   });
 
+  // Auto-mount Obsidian vault from .env OBSIDIAN_PATH (if set and exists)
+  const { OBSIDIAN_PATH: obsidianPath } = readEnvFile(['OBSIDIAN_PATH']);
+  if (obsidianPath && fs.existsSync(obsidianPath)) {
+    mounts.push({
+      hostPath: obsidianPath,
+      containerPath: '/workspace/extra/obsidian',
+      readonly: false,
+    });
+  }
+
   // Additional mounts validated against external allowlist (tamper-proof from containers)
   if (group.containerConfig?.additionalMounts) {
     const validatedMounts = validateAdditionalMounts(
