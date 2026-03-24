@@ -14,10 +14,10 @@ const envConfig = readEnvFile([
 ]);
 
 export const ASSISTANT_NAME =
-  process.env.ASSISTANT_NAME || envConfig.ASSISTANT_NAME || 'Andy';
+  envConfig.ASSISTANT_NAME || process.env.ASSISTANT_NAME || 'Andy';
 export const ASSISTANT_HAS_OWN_NUMBER =
-  (process.env.ASSISTANT_HAS_OWN_NUMBER ||
-    envConfig.ASSISTANT_HAS_OWN_NUMBER) === 'true';
+  (envConfig.ASSISTANT_HAS_OWN_NUMBER ||
+    process.env.ASSISTANT_HAS_OWN_NUMBER) === 'true';
 export const POLL_INTERVAL = 2000;
 export const SCHEDULER_POLL_INTERVAL = 60000;
 
@@ -59,7 +59,9 @@ export const CONTAINER_MAX_OUTPUT_SIZE = parseInt(
   10,
 ); // 10MB default
 export const CREDENTIAL_PROXY_PORT = parseInt(
-  process.env.CREDENTIAL_PROXY_PORT || envConfig.CREDENTIAL_PROXY_PORT || '3001',
+  envConfig.CREDENTIAL_PROXY_PORT ||
+    process.env.CREDENTIAL_PROXY_PORT ||
+    '3001',
   10,
 );
 export const IPC_POLL_INTERVAL = 1000;
@@ -79,8 +81,8 @@ export const TRIGGER_PATTERN = new RegExp(
 );
 
 export const TELEGRAM_BOT_POOL = (
-  process.env.TELEGRAM_BOT_POOL ||
   envConfig.TELEGRAM_BOT_POOL ||
+  process.env.TELEGRAM_BOT_POOL ||
   ''
 )
   .split(',')

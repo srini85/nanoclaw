@@ -270,14 +270,14 @@ function buildContainerArgs(
     'MICROSOFT_TENANT_ID',
     'MICROSOFT_REFRESH_TOKEN',
   ]) {
-    const val = process.env[key] || outlookEnv[key];
+    const val = outlookEnv[key] || process.env[key];
     if (val) args.push('-e', `${key}=${val}`);
   }
 
   // Pass Jira credentials if configured
   const jiraEnv = readEnvFile(['JIRA_URL', 'JIRA_EMAIL', 'JIRA_API_TOKEN']);
   for (const key of ['JIRA_URL', 'JIRA_EMAIL', 'JIRA_API_TOKEN']) {
-    const val = process.env[key] || jiraEnv[key];
+    const val = jiraEnv[key] || process.env[key];
     if (val) args.push('-e', `${key}=${val}`);
   }
 

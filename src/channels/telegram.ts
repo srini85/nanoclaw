@@ -401,7 +401,11 @@ export class TelegramChannel implements Channel {
     });
   }
 
-  async sendFile(jid: string, filePath: string, caption?: string): Promise<void> {
+  async sendFile(
+    jid: string,
+    filePath: string,
+    caption?: string,
+  ): Promise<void> {
     if (!this.bot) {
       logger.warn('Telegram bot not initialized');
       return;
@@ -412,9 +416,17 @@ export class TelegramChannel implements Channel {
       const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
       const inputFile = new InputFile(filePath);
       if (imageExts.includes(ext)) {
-        await this.bot.api.sendPhoto(numericId, inputFile, caption ? { caption } : {});
+        await this.bot.api.sendPhoto(
+          numericId,
+          inputFile,
+          caption ? { caption } : {},
+        );
       } else {
-        await this.bot.api.sendDocument(numericId, inputFile, caption ? { caption } : {});
+        await this.bot.api.sendDocument(
+          numericId,
+          inputFile,
+          caption ? { caption } : {},
+        );
       }
       logger.info({ jid, filePath }, 'Telegram file sent');
     } catch (err) {
@@ -479,7 +491,7 @@ export class TelegramChannel implements Channel {
 registerChannel('telegram', (opts: ChannelOpts) => {
   const envVars = readEnvFile(['TELEGRAM_BOT_TOKEN']);
   const token =
-    process.env.TELEGRAM_BOT_TOKEN || envVars.TELEGRAM_BOT_TOKEN || '';
+    envVars.TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || '';
   if (!token) {
     logger.warn('Telegram: TELEGRAM_BOT_TOKEN not set');
     return null;

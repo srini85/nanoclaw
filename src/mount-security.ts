@@ -150,14 +150,14 @@ function loadDotEnvVars(): Record<string, string> {
 
 /**
  * Expand ${ENV_VAR} references and ~ to home directory, then resolve to absolute path.
- * Checks process.env first, then falls back to the project's .env file.
+ * Checks the project's .env file first, then falls back to process.env.
  * Example: "${OBSIDIAN_PATH}/notes" → "/home/user/obsidian/notes"
  */
 export function expandPath(p: string): string {
   // Expand ${VAR_NAME} environment variable references
   const dotEnv = loadDotEnvVars();
   const withEnv = p.replace(/\$\{([^}]+)\}/g, (match, varName) => {
-    const val = process.env[varName] ?? dotEnv[varName];
+    const val = dotEnv[varName] ?? process.env[varName];
     if (val === undefined) {
       logger.warn(
         { varName, path: p },
