@@ -94,6 +94,21 @@ const args = process.argv.slice(3);
 try {
   const token = await getAccessToken();
 
+  // Safety check: verify we're authenticated as the expected account
+  // before performing any write operations (create-draft, create-reply)
+  if (['create-draft', 'create-reply'].includes(command)) {
+    const me = await graph(token, '/me?$select=mail,userPrincipalName');
+    const account = me.mail || me.userPrincipalName;
+    console.error(`Authenticated as: ${account}`);
+    const expectedEmail = process.env.MICROSOFT_EXPECTED_EMAIL;
+    if (expectedEmail && account.toLowerCase() !== expectedEmail.toLowerCase()) {
+      throw new Error(
+        `Account mismatch! Expected ${expectedEmail} but authenticated as ${account}. ` +
+        `Aborting to prevent writing to wrong mailbox.`
+      );
+    }
+  }
+
   if (command === 'fetch-emails') {
     const count = Math.min(parseInt(args[0]) || 10, 25);
     const data = await graph(
