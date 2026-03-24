@@ -67,6 +67,25 @@ node /tools/outlook.mjs create-reply --id <email-id> --body "Reply text"
 
 Always parse the JSON output. For `fetch-emails`, show a numbered summary. For drafts, confirm with the user what to include before creating.
 
+### Custom email scripts — MANDATORY auth module
+
+**CRITICAL: When writing `.mjs` scripts that call Microsoft Graph API directly (e.g. outreach scripts with HTML templates), you MUST use the shared auth module. NEVER implement your own token exchange.**
+
+```javascript
+import { getVerifiedToken, graph } from '/tools/outlook-auth.mjs';
+
+const token = await getVerifiedToken(); // exchanges token AND verifies correct mailbox
+const draft = await graph(token, '/me/messages', {
+  method: 'POST',
+  body: JSON.stringify({ subject: '...', toRecipients: [...], body: { contentType: 'HTML', content: html } }),
+});
+```
+
+- `getVerifiedToken()` — exchanges refresh token for access token, then calls `/me` to verify the account matches the expected mailbox. **Throws an error and aborts if mismatch.**
+- `graph(token, path, options)` — convenience wrapper for Graph API calls.
+- **NEVER** call `https://login.microsoftonline.com/` directly in scripts.
+- **NEVER** implement `getAccessToken()` yourself — always import from `/tools/outlook-auth.mjs`.
+
 ## Obsidian Notes
 
 Your Obsidian vault is mounted at `/workspace/extra/obsidian/`. All notes live under `/workspace/extra/obsidian/SriBot/` in these categories:
