@@ -12,6 +12,7 @@ import {
 } from './config.js';
 import { initBotPool } from './channels/telegram.js';
 import { startCredentialProxy } from './credential-proxy.js';
+import { startDashboard } from './dashboard.js';
 import './channels/index.js';
 import {
   getChannelFactory,
@@ -509,10 +510,14 @@ async function main(): Promise<void> {
     PROXY_BIND_HOST,
   );
 
+  // Start task dashboard
+  const dashboardServer = startDashboard();
+
   // Graceful shutdown handlers
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'Shutdown signal received');
     proxyServer.close();
+    dashboardServer.close();
     removePidFile();
     await queue.shutdown(10000);
     for (const ch of channels) await ch.disconnect();

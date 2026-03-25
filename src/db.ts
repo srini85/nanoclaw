@@ -480,6 +480,18 @@ export function updateTaskAfterRun(
   ).run(nextRun, now, lastResult, nextRun, id);
 }
 
+export function getTaskRunLogs(
+  taskId: string,
+  limit: number = 20,
+): (TaskRunLog & { id: number })[] {
+  return db
+    .prepare(
+      `SELECT id, task_id, run_at, duration_ms, status, result, error
+       FROM task_run_logs WHERE task_id = ? ORDER BY run_at DESC LIMIT ?`,
+    )
+    .all(taskId, limit) as (TaskRunLog & { id: number })[];
+}
+
 export function logTaskRun(log: TaskRunLog): void {
   db.prepare(
     `
