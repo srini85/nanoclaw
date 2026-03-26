@@ -26,6 +26,7 @@ export async function run(_args: string[]): Promise<void> {
   const projectRoot = process.cwd();
   const platform = getPlatform();
   const homeDir = os.homedir();
+  const serviceName = path.basename(projectRoot);
 
   logger.info('Starting verification');
 
@@ -34,11 +35,12 @@ export async function run(_args: string[]): Promise<void> {
   const mgr = getServiceManager();
 
   if (mgr === 'launchd') {
+    const plistLabel = `com.${serviceName}`;
     try {
       const output = execSync('launchctl list', { encoding: 'utf-8' });
-      if (output.includes('com.nanoclaw')) {
+      if (output.includes(plistLabel)) {
         // Check if it has a PID (actually running)
-        const line = output.split('\n').find((l) => l.includes('com.nanoclaw'));
+        const line = output.split('\n').find((l) => l.includes(plistLabel));
         if (line) {
           const pidField = line.trim().split(/\s+/)[0];
           service = pidField !== '-' && pidField ? 'running' : 'stopped';
@@ -50,14 +52,14 @@ export async function run(_args: string[]): Promise<void> {
   } else if (mgr === 'systemd') {
     const prefix = isRoot() ? 'systemctl' : 'systemctl --user';
     try {
-      execSync(`${prefix} is-active nanoclaw`, { stdio: 'ignore' });
+      execSync(`${prefix} is-active ${serviceName}`, { stdio: 'ignore' });
       service = 'running';
     } catch {
       try {
         const output = execSync(`${prefix} list-unit-files`, {
           encoding: 'utf-8',
         });
-        if (output.includes('nanoclaw')) {
+        if (output.includes(serviceName)) {
           service = 'stopped';
         }
       } catch {

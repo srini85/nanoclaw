@@ -9,6 +9,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
+import { readEnvFile } from '../src/env.js';
 import { logger } from '../src/logger.js';
 import {
   getPlatform,
@@ -20,11 +21,21 @@ import {
 } from './platform.js';
 import { emitStatus } from './status.js';
 
+/**
+ * Derive a unique service name from the project directory.
+ * e.g. /home/srini/data/nanoclaw-gf → "nanoclaw-gf"
+ *      /home/srini/data/nanoclaw    → "nanoclaw"
+ */
+function getServiceName(projectRoot: string): string {
+  return path.basename(projectRoot);
+}
+
 export async function run(_args: string[]): Promise<void> {
   const projectRoot = process.cwd();
   const platform = getPlatform();
   const nodePath = getNodePath();
   const homeDir = os.homedir();
+  const serviceName = getServiceName(projectRoot);
 
   logger.info({ platform, nodePath, projectRoot }, 'Setting up service');
 
@@ -73,11 +84,13 @@ function setupLaunchd(
   nodePath: string,
   homeDir: string,
 ): void {
+  const serviceName = getServiceName(projectRoot);
+  const plistLabel = `com.${serviceName}`;
   const plistPath = path.join(
     homeDir,
     'Library',
     'LaunchAgents',
-    'com.nanoclaw.plist',
+    `${plistLabel}.plist`,
   );
   fs.mkdirSync(path.dirname(plistPath), { recursive: true });
 
@@ -86,10 +99,12 @@ function setupLaunchd(
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.nanoclaw</string>
+    <string>${plistLabel}</string>
     <key>ProgramArguments</key>
     <array>
         <string>${nodePath}</string>
+        <string>--no-network-family-autoselection</string>
+        <string>--dns-result-order=ipv4first</string>
         <string>${projectRoot}/dist/index.js</string>
     </array>
     <key>WorkingDirectory</key>
@@ -128,7 +143,7 @@ function setupLaunchd(
   let serviceLoaded = false;
   try {
     const output = execSync('launchctl list', { encoding: 'utf-8' });
-    serviceLoaded = output.includes('com.nanoclaw');
+    serviceLoaded = output.includes(plistLabel);
   } catch {
     // launchctl list failed
   }
@@ -207,13 +222,14 @@ function setupSystemd(
   homeDir: string,
 ): void {
   const runningAsRoot = isRoot();
+  const serviceName = getServiceName(projectRoot);
 
   // Root uses system-level service, non-root uses user-level
   let unitPath: string;
   let systemctlPrefix: string;
 
   if (runningAsRoot) {
-    unitPath = '/etc/systemd/system/nanoclaw.service';
+    unitPath = `/etc/systemd/system/${serviceName}.service`;
     systemctlPrefix = 'systemctl';
     logger.info('Running as root — installing system-level systemd unit');
   } else {
@@ -229,17 +245,19 @@ function setupSystemd(
     }
     const unitDir = path.join(homeDir, '.config', 'systemd', 'user');
     fs.mkdirSync(unitDir, { recursive: true });
-    unitPath = path.join(unitDir, 'nanoclaw.service');
+    unitPath = path.join(unitDir, `${serviceName}.service`);
     systemctlPrefix = 'systemctl --user';
   }
 
+  const env = readEnvFile(['ASSISTANT_NAME']);
+  const assistantName = env.ASSISTANT_NAME || serviceName;
   const unit = `[Unit]
-Description=NanoClaw Personal Assistant
+Description=NanoClaw ${assistantName} Personal Assistant
 After=network.target
 
 [Service]
 Type=simple
-ExecStart=${nodePath} ${projectRoot}/dist/index.js
+ExecStart=${nodePath} --no-network-family-autoselection --dns-result-order=ipv4first ${projectRoot}/dist/index.js
 WorkingDirectory=${projectRoot}
 Restart=always
 RestartSec=5
@@ -273,13 +291,13 @@ WantedBy=${runningAsRoot ? 'multi-user.target' : 'default.target'}`;
   }
 
   try {
-    execSync(`${systemctlPrefix} enable nanoclaw`, { stdio: 'ignore' });
+    execSync(`${systemctlPrefix} enable ${serviceName}`, { stdio: 'ignore' });
   } catch (err) {
     logger.error({ err }, 'systemctl enable failed');
   }
 
   try {
-    execSync(`${systemctlPrefix} start nanoclaw`, { stdio: 'ignore' });
+    execSync(`${systemctlPrefix} start ${serviceName}`, { stdio: 'ignore' });
   } catch (err) {
     logger.error({ err }, 'systemctl start failed');
   }
@@ -287,7 +305,7 @@ WantedBy=${runningAsRoot ? 'multi-user.target' : 'default.target'}`;
   // Verify
   let serviceLoaded = false;
   try {
-    execSync(`${systemctlPrefix} is-active nanoclaw`, { stdio: 'ignore' });
+    execSync(`${systemctlPrefix} is-active ${serviceName}`, { stdio: 'ignore' });
     serviceLoaded = true;
   } catch {
     // Not active
