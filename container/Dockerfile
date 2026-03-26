@@ -25,9 +25,16 @@ RUN apt-get update && apt-get install -y \
     curl \
     git \
     python3 \
+    unzip \
     libreoffice-writer \
     libreoffice-java-common \
     && rm -rf /var/lib/apt/lists/*
+
+# Install AWS CLI v2
+RUN curl -sL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip \
+    && unzip -q /tmp/awscliv2.zip -d /tmp \
+    && /tmp/aws/install \
+    && rm -rf /tmp/aws /tmp/awscliv2.zip
 
 # Set Chromium path for agent-browser
 ENV AGENT_BROWSER_EXECUTABLE_PATH=/usr/bin/chromium

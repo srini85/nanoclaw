@@ -536,14 +536,20 @@ async function handleRequest(
 
     if (method === 'GET') {
       const task = getTaskById(id);
-      if (!task) { jsonResponse(res, 404, { error: 'Not found' }); return; }
+      if (!task) {
+        jsonResponse(res, 404, { error: 'Not found' });
+        return;
+      }
       jsonResponse(res, 200, task);
       return;
     }
 
     if (method === 'PATCH') {
       const task = getTaskById(id);
-      if (!task) { jsonResponse(res, 404, { error: 'Not found' }); return; }
+      if (!task) {
+        jsonResponse(res, 404, { error: 'Not found' });
+        return;
+      }
 
       let body: Record<string, string>;
       try {
@@ -564,10 +570,14 @@ async function handleRequest(
         updates.status = s;
       }
 
-      const newType = (body.schedule_type ?? task.schedule_type) as ScheduledTask['schedule_type'];
+      const newType = (body.schedule_type ??
+        task.schedule_type) as ScheduledTask['schedule_type'];
       const newValue = body.schedule_value ?? task.schedule_value;
 
-      if (body.schedule_type !== undefined || body.schedule_value !== undefined) {
+      if (
+        body.schedule_type !== undefined ||
+        body.schedule_value !== undefined
+      ) {
         if (!['cron', 'interval', 'once'].includes(newType)) {
           jsonResponse(res, 400, { error: 'Invalid schedule_type' });
           return;
@@ -578,7 +588,9 @@ async function handleRequest(
         // Recompute next_run
         if (newType === 'cron') {
           try {
-            const interval = CronExpressionParser.parse(newValue, { tz: TIMEZONE });
+            const interval = CronExpressionParser.parse(newValue, {
+              tz: TIMEZONE,
+            });
             updates.next_run = interval.next().toISOString();
           } catch {
             jsonResponse(res, 400, { error: 'Invalid cron expression' });
@@ -587,7 +599,9 @@ async function handleRequest(
         } else if (newType === 'interval') {
           const ms = parseInt(newValue, 10);
           if (isNaN(ms) || ms <= 0) {
-            jsonResponse(res, 400, { error: 'Invalid interval (must be positive ms)' });
+            jsonResponse(res, 400, {
+              error: 'Invalid interval (must be positive ms)',
+            });
             return;
           }
           updates.next_run = new Date(Date.now() + ms).toISOString();
@@ -608,7 +622,10 @@ async function handleRequest(
 
     if (method === 'DELETE') {
       const task = getTaskById(id);
-      if (!task) { jsonResponse(res, 404, { error: 'Not found' }); return; }
+      if (!task) {
+        jsonResponse(res, 404, { error: 'Not found' });
+        return;
+      }
       deleteTask(id);
       jsonResponse(res, 200, { ok: true });
       return;
@@ -642,7 +659,10 @@ export function startDashboard(): http.Server {
   });
 
   server.listen(DASHBOARD_PORT, '127.0.0.1', () => {
-    logger.info({ port: DASHBOARD_PORT }, `Dashboard running at http://localhost:${DASHBOARD_PORT}`);
+    logger.info(
+      { port: DASHBOARD_PORT },
+      `Dashboard running at http://localhost:${DASHBOARD_PORT}`,
+    );
   });
 
   return server;

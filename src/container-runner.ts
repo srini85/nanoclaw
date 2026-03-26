@@ -293,6 +293,13 @@ function buildContainerArgs(
     if (val) args.push('-e', `${key}=${val}`);
   }
 
+  // Pass AWS credentials if configured
+  const awsEnv = readEnvFile(['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_DEFAULT_REGION']);
+  for (const key of ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_DEFAULT_REGION']) {
+    const val = awsEnv[key] || process.env[key];
+    if (val) args.push('-e', `${key}=${val}`);
+  }
+
   // Run as host user so bind-mounted files are accessible.
   // Skip when running as root (uid 0), as the container's node user (uid 1000),
   // or when getuid is unavailable (native Windows without WSL).

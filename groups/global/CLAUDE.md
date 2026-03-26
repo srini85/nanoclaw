@@ -223,6 +223,22 @@ node /tools/jira.mjs update-comment PROJECT-123 --comment-id 12345 --body "Updat
 
 Always parse the JSON output. When showing tickets to the user, include key, summary, status, and URL. For searches, show a numbered list. Before creating or updating, confirm the details with the user.
 
+## AWS
+
+You have the AWS CLI (`aws`) available. Use it to check services, query resources, and execute operations across AWS.
+
+```bash
+# Examples
+aws s3 ls
+aws ec2 describe-instances --query 'Reservations[].Instances[].{Id:InstanceId,State:State.Name,Type:InstanceType}' --output table
+aws lambda list-functions --output table
+aws ecs list-clusters
+aws cloudwatch get-metric-statistics --namespace AWS/EC2 --metric-name CPUUtilization --period 3600 --statistics Average --start-time 2024-01-01T00:00:00Z --end-time 2024-01-02T00:00:00Z
+aws logs tail /aws/lambda/my-function --since 1h
+```
+
+Use `--output table` or `--output json` as appropriate. For large result sets, use `--query` (JMESPath) to filter. Always summarize results clearly for the user.
+
 ## Receiving Images and Files
 
 When a message contains an `attachment` attribute in the XML, the file has been downloaded and is available at that path inside the container under `/workspace/media/`.
