@@ -12,57 +12,10 @@
  *   MICROSOFT_CLIENT_ID
  *   MICROSOFT_REFRESH_TOKEN
  *   MICROSOFT_TENANT_ID  (optional, defaults to "common")
+ *   MICROSOFT_EXPECTED_EMAIL  (required — always verified)
  */
 
-const CLIENT_ID = process.env.MICROSOFT_CLIENT_ID;
-const CLIENT_SECRET = process.env.MICROSOFT_CLIENT_SECRET;
-const TENANT_ID = process.env.MICROSOFT_TENANT_ID || 'organizations';
-const REFRESH_TOKEN = process.env.MICROSOFT_REFRESH_TOKEN;
-
-const SCOPES = 'https://graph.microsoft.com/Mail.Read https://graph.microsoft.com/Mail.ReadWrite offline_access';
-
-async function getAccessToken() {
-  if (!CLIENT_ID || !REFRESH_TOKEN) {
-    throw new Error(
-      'Outlook not configured. MICROSOFT_CLIENT_ID and MICROSOFT_REFRESH_TOKEN must be set in .env',
-    );
-  }
-  const params = new URLSearchParams({
-    client_id: CLIENT_ID,
-    grant_type: 'refresh_token',
-    refresh_token: REFRESH_TOKEN,
-    scope: SCOPES,
-    ...(CLIENT_SECRET ? { client_secret: CLIENT_SECRET } : {}),
-  });
-  const res = await fetch(
-    `https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/token`,
-    {
-      method: 'POST',
-      body: params,
-    },
-  );
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(`Token refresh failed: ${data.error_description || data.error}`);
-  }
-  return data.access_token;
-}
-
-async function graph(token, path, options = {}) {
-  const res = await fetch(`https://graph.microsoft.com/v1.0${path}`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    ...options,
-  });
-  if (res.status === 204) return null;
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(`Graph API ${res.status}: ${data.error?.message || JSON.stringify(data)}`);
-  }
-  return data;
-}
+import { getVerifiedToken, graph } from '/tools/outlook-auth.mjs';
 
 function parseFlags(args) {
   const flags = {};
@@ -92,22 +45,8 @@ const command = process.argv[2];
 const args = process.argv.slice(3);
 
 try {
-  const token = await getAccessToken();
-
-  // Safety check: verify we're authenticated as the expected account
-  // before performing any write operations (create-draft, create-reply)
-  if (['create-draft', 'create-reply'].includes(command)) {
-    const me = await graph(token, '/me?$select=mail,userPrincipalName');
-    const account = me.mail || me.userPrincipalName;
-    console.error(`Authenticated as: ${account}`);
-    const expectedEmail = process.env.MICROSOFT_EXPECTED_EMAIL;
-    if (expectedEmail && account.toLowerCase() !== expectedEmail.toLowerCase()) {
-      throw new Error(
-        `Account mismatch! Expected ${expectedEmail} but authenticated as ${account}. ` +
-        `Aborting to prevent writing to wrong mailbox.`
-      );
-    }
-  }
+  // Always verify account on every operation (reads AND writes)
+  const token = await getVerifiedToken();
 
   if (command === 'fetch-emails') {
     const count = Math.min(parseInt(args[0]) || 10, 25);
