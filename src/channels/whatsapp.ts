@@ -19,6 +19,15 @@ import {
 } from '../config.js';
 import { getLastGroupSync, setLastGroupSync, updateChatName } from '../db.js';
 import { logger } from '../logger.js';
+
+// Baileys requires ILogger which includes level, child, and trace.
+// Wrap our lightweight logger into a compatible adapter.
+const baileysLogger = {
+  ...logger,
+  level: 'silent',
+  trace: () => {},
+  child: () => baileysLogger,
+};
 import {
   Channel,
   OnInboundMessage,
@@ -74,10 +83,10 @@ export class WhatsAppChannel implements Channel {
       version,
       auth: {
         creds: state.creds,
-        keys: makeCacheableSignalKeyStore(state.keys, logger),
+        keys: makeCacheableSignalKeyStore(state.keys, baileysLogger),
       },
       printQRInTerminal: false,
-      logger,
+      logger: baileysLogger,
       browser: Browsers.macOS('Chrome'),
     });
 
