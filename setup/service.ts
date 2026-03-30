@@ -261,6 +261,7 @@ ExecStart=${nodePath} --no-network-family-autoselection --dns-result-order=ipv4f
 WorkingDirectory=${projectRoot}
 Restart=always
 RestartSec=5
+KillMode=process
 Environment=HOME=${homeDir}
 Environment=PATH=/usr/local/bin:/usr/bin:/bin:${homeDir}/.local/bin
 StandardOutput=append:${projectRoot}/logs/nanoclaw.log
@@ -282,6 +283,20 @@ WantedBy=${runningAsRoot ? 'multi-user.target' : 'default.target'}`;
 
   // Kill orphaned nanoclaw processes to avoid channel connection conflicts
   killOrphanedProcesses(projectRoot);
+
+  // Enable lingering so the user service survives SSH logout.
+  // Without linger, systemd terminates all user processes when the last session closes.
+  if (!runningAsRoot) {
+    try {
+      execSync('loginctl enable-linger', { stdio: 'ignore' });
+      logger.info('Enabled loginctl linger for current user');
+    } catch (err) {
+      logger.warn(
+        { err },
+        'loginctl enable-linger failed — service may stop on SSH logout',
+      );
+    }
+  }
 
   // Enable and start
   try {
@@ -318,6 +333,7 @@ WantedBy=${runningAsRoot ? 'multi-user.target' : 'default.target'}`;
     UNIT_PATH: unitPath,
     SERVICE_LOADED: serviceLoaded,
     ...(dockerGroupStale ? { DOCKER_GROUP_STALE: true } : {}),
+    LINGER_ENABLED: !runningAsRoot,
     STATUS: 'success',
     LOG: 'logs/setup.log',
   });
