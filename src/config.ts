@@ -10,6 +10,7 @@ const envConfig = readEnvFile([
   'ASSISTANT_NAME',
   'ASSISTANT_HAS_OWN_NUMBER',
   'CREDENTIAL_PROXY_PORT',
+  'DASHBOARD_PORT',
   'TELEGRAM_BOT_POOL',
 ]);
 

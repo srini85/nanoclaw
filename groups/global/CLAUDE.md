@@ -223,6 +223,52 @@ node /tools/jira.mjs update-comment PROJECT-123 --comment-id 12345 --body "Updat
 
 Always parse the JSON output. When showing tickets to the user, include key, summary, status, and URL. For searches, show a numbered list. Before creating or updating, confirm the details with the user.
 
+## Lookout (Aged Care CRM)
+
+Query and manage aged care data — clients, workers, help plans, visits, tickets, and services.
+
+```bash
+# List clients (supports search)
+node /tools/lookout.mjs list-clients --search "Smith" --per 10
+
+# Get client details
+node /tools/lookout.mjs get-client 123
+
+# View client notes
+node /tools/lookout.mjs get-client-notes 123
+
+# View workers assigned to a client
+node /tools/lookout.mjs get-client-workers 123
+
+# View help plan (care plan) for a client
+node /tools/lookout.mjs get-help-plan 123
+node /tools/lookout.mjs get-help-plan-entries 123
+
+# List workers
+node /tools/lookout.mjs list-workers --search "Jane"
+
+# Get worker details and their clients
+node /tools/lookout.mjs get-worker 456
+node /tools/lookout.mjs get-worker-clients 456
+
+# List and view visits
+node /tools/lookout.mjs list-visits --client_id 123
+node /tools/lookout.mjs get-visit 789
+
+# List and view tickets
+node /tools/lookout.mjs list-tickets
+node /tools/lookout.mjs get-ticket 101
+node /tools/lookout.mjs get-ticket-comments 101
+
+# Services
+node /tools/lookout.mjs list-services
+
+# Auth check
+node /tools/lookout.mjs me
+```
+
+Always parse the JSON output. When showing results, include IDs and names. For lists, show a numbered summary. Use `--search` to narrow results before paginating.
+
 ## AWS
 
 You have the AWS CLI (`aws`) available. Use it to check services, query resources, and execute operations across AWS.
