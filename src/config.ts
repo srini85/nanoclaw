@@ -67,9 +67,7 @@ export const CREDENTIAL_PROXY_PORT = parseInt(
   10,
 );
 export const DASHBOARD_PORT = parseInt(
-  envConfig.DASHBOARD_PORT ||
-    process.env.DASHBOARD_PORT ||
-    '3100',
+  envConfig.DASHBOARD_PORT || process.env.DASHBOARD_PORT || '3100',
   10,
 );
 export const ONECLI_URL =
