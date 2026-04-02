@@ -62,7 +62,9 @@ export const CONTAINER_MAX_OUTPUT_SIZE = parseInt(
   10,
 ); // 10MB default
 export const CREDENTIAL_PROXY_PORT = parseInt(
-  envConfig.CREDENTIAL_PROXY_PORT || process.env.CREDENTIAL_PROXY_PORT || '3001',
+  envConfig.CREDENTIAL_PROXY_PORT ||
+    process.env.CREDENTIAL_PROXY_PORT ||
+    '3001',
   10,
 );
 export const DASHBOARD_PORT = parseInt(
