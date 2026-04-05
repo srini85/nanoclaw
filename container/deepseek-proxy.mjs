@@ -61,23 +61,15 @@ const CONTEXT_LIMIT = parseInt(process.env.DEEPSEEK_CONTEXT_LIMIT || '131072', 1
 const COMPLETION_RESERVE = 8192;
 const INPUT_LIMIT = CONTEXT_LIMIT - COMPLETION_RESERVE;
 
-/** Rough token estimate: ~4 chars per token for English/code mixed content */
+/** Conservative token estimate: ~3 chars per token (JSON/schemas tokenize densely) */
 function estimateTokens(text) {
   if (!text) return 0;
-  return Math.ceil(text.length / 4);
+  return Math.ceil(text.length / 3);
 }
 
 function estimateMessageTokens(msg) {
-  let tokens = 4; // role + framing overhead
-  if (typeof msg.content === 'string') {
-    tokens += estimateTokens(msg.content);
-  }
-  if (msg.tool_calls) {
-    for (const tc of msg.tool_calls) {
-      tokens += estimateTokens(tc.function?.name) + estimateTokens(tc.function?.arguments) + 10;
-    }
-  }
-  return tokens;
+  // Serialize the whole message for accurate estimation
+  return estimateTokens(JSON.stringify(msg));
 }
 
 /**
@@ -86,8 +78,8 @@ function estimateMessageTokens(msg) {
  * Also keeps tool-result chains intact (tool msg must follow its assistant tool_calls).
  */
 function truncateMessages(messages, tools) {
-  // Estimate tool definition tokens (~150 tokens per tool on average)
-  const toolTokens = (tools?.length || 0) * 150;
+  // Estimate tool tokens by serializing the actual definitions
+  const toolTokens = tools?.length ? estimateTokens(JSON.stringify(tools)) : 0;
   const systemMsg = messages[0]?.role === 'system' ? messages[0] : null;
   const systemTokens = systemMsg ? estimateMessageTokens(systemMsg) : 0;
   const budget = INPUT_LIMIT - toolTokens - systemTokens;
