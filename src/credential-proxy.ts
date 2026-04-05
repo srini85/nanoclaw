@@ -11,9 +11,10 @@
  *             subsequent requests carry the temp key which is valid as-is.
  *
  * OAuth token resolution order (checked fresh on each auth exchange):
- *   1. ~/.claude-sriom/.credentials.json (or CLAUDE_CONFIG_DIR from .env)
+ *   1. CLAUDE_CONFIG_DIR/.credentials.json (e.g. ~/.claude-sriom)
  *      → claudeAiOauth.accessToken if not expired
- *   2. CLAUDE_CODE_OAUTH_TOKEN / ANTHROPIC_AUTH_TOKEN from .env
+ *   2. ~/.claude/.credentials.json (fallback — kept fresh by regular claude CLI use)
+ *   3. CLAUDE_CODE_OAUTH_TOKEN / ANTHROPIC_AUTH_TOKEN from .env
  */
 import fs from 'fs';
 import os from 'os';
@@ -26,17 +27,10 @@ import { readEnvFile } from './env.js';
 import { logger } from './logger.js';
 
 /**
- * Read the current OAuth access token from Claude Code's credentials file.
+ * Read the current OAuth access token from a credentials file.
  * Returns undefined if not available or expired.
  */
-function readClaudeCredentialsToken(): string | undefined {
-  const envSecrets = readEnvFile(['CLAUDE_CONFIG_DIR']);
-  const configDir = (
-    envSecrets.CLAUDE_CONFIG_DIR ||
-    process.env.CLAUDE_CONFIG_DIR ||
-    path.join(os.homedir(), '.claude')
-  ).replace(/^~/, os.homedir());
-
+function readTokenFromDir(configDir: string): string | undefined {
   const credentialsPath = path.join(configDir, '.credentials.json');
   try {
     const content = fs.readFileSync(credentialsPath, 'utf-8');
@@ -52,8 +46,35 @@ function readClaudeCredentialsToken(): string | undefined {
       return oauth.accessToken;
     }
   } catch {
-    // Not available — fall through to .env
+    // Not available
   }
+  return undefined;
+}
+
+/**
+ * Read the current OAuth access token from Claude Code's credentials file.
+ * Checks the configured CLAUDE_CONFIG_DIR first, then falls back to ~/.claude
+ * (the default Claude Code directory, kept fresh by regular claude CLI usage).
+ * Returns undefined if not available or expired in either location.
+ */
+function readClaudeCredentialsToken(): string | undefined {
+  const envSecrets = readEnvFile(['CLAUDE_CONFIG_DIR']);
+  const configuredDir = (
+    envSecrets.CLAUDE_CONFIG_DIR ||
+    process.env.CLAUDE_CONFIG_DIR ||
+    path.join(os.homedir(), '.claude')
+  ).replace(/^~/, os.homedir());
+
+  // Try the configured dir first
+  const token = readTokenFromDir(configuredDir);
+  if (token) return token;
+
+  // Fall back to ~/.claude if configuredDir was a different directory
+  const defaultDir = path.join(os.homedir(), '.claude');
+  if (configuredDir !== defaultDir) {
+    return readTokenFromDir(defaultDir);
+  }
+
   return undefined;
 }
 
