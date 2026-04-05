@@ -44,7 +44,11 @@ function readClaudeCredentialsToken(): string | undefined {
       claudeAiOauth?: { accessToken?: string; expiresAt?: number };
     };
     const oauth = creds?.claudeAiOauth;
-    if (oauth?.accessToken && oauth?.expiresAt && oauth.expiresAt > Date.now()) {
+    if (
+      oauth?.accessToken &&
+      oauth?.expiresAt &&
+      oauth.expiresAt > Date.now()
+    ) {
       return oauth.accessToken;
     }
   } catch {
@@ -110,7 +114,10 @@ export function startCredentialProxy(
           // is picked up automatically without restarting the service.
           if (headers['authorization']) {
             delete headers['authorization'];
-            const envSecrets = readEnvFile(['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_AUTH_TOKEN']);
+            const envSecrets = readEnvFile([
+              'CLAUDE_CODE_OAUTH_TOKEN',
+              'ANTHROPIC_AUTH_TOKEN',
+            ]);
             const freshToken =
               readClaudeCredentialsToken() ||
               envSecrets.CLAUDE_CODE_OAUTH_TOKEN ||
@@ -118,7 +125,9 @@ export function startCredentialProxy(
             if (freshToken) {
               headers['authorization'] = `Bearer ${freshToken}`;
             } else {
-              logger.warn('OAuth mode: no valid token found in credentials file or .env');
+              logger.warn(
+                'OAuth mode: no valid token found in credentials file or .env',
+              );
             }
           }
         }
