@@ -14,6 +14,8 @@ import {
   DATA_DIR,
   GROUPS_DIR,
   IDLE_TIMEOUT,
+  MAX_TURNS_INTERACTIVE,
+  MAX_TURNS_SCHEDULED,
   MODEL_INTERACTIVE,
   MODEL_SCHEDULED,
   TIMEZONE,
@@ -388,7 +390,14 @@ export async function runContainerAgent(
   const safeName = group.folder.replace(/[^a-zA-Z0-9-]/g, '-');
   const containerName = `nanoclaw-${safeName}-${Date.now()}`;
   const model = input.isScheduledTask ? MODEL_SCHEDULED : MODEL_INTERACTIVE;
+  const maxTurns = input.isScheduledTask
+    ? MAX_TURNS_SCHEDULED
+    : MAX_TURNS_INTERACTIVE;
   const containerArgs = buildContainerArgs(mounts, containerName, model);
+  // Insert MAX_TURNS env var before the image name (last element)
+  if (maxTurns) {
+    containerArgs.splice(-1, 0, '-e', `MAX_TURNS=${maxTurns}`);
+  }
 
   logger.debug(
     {

@@ -37,8 +37,7 @@ Each directory is an installed skill. The directory name is the skill name (e.g.
 Read the allowed tools from your SDK configuration. You always have access to:
 - **Core:** Bash, Read, Write, Edit, Glob, Grep
 - **Web:** WebSearch, WebFetch
-- **Orchestration:** Task, TaskOutput, TaskStop, TeamCreate, TeamDelete, SendMessage
-- **Other:** TodoWrite, ToolSearch, Skill, NotebookEdit
+- **Other:** TodoWrite, Skill
 - **MCP:** mcp__nanoclaw__* (messaging, tasks, group management)
 
 ### 3. MCP server tools

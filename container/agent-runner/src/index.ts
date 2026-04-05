@@ -405,10 +405,7 @@ async function runQuery(
         'Bash',
         'Read', 'Write', 'Edit', 'Glob', 'Grep',
         'WebSearch', 'WebFetch',
-        'Task', 'TaskOutput', 'TaskStop',
-        'TeamCreate', 'TeamDelete', 'SendMessage',
-        'TodoWrite', 'ToolSearch', 'Skill',
-        'NotebookEdit',
+        'TodoWrite', 'Skill',
         'mcp__nanoclaw__*'
       ],
       env: sdkEnv,
@@ -429,6 +426,7 @@ async function runQuery(
       hooks: {
         PreCompact: [{ hooks: [createPreCompactHook(containerInput.assistantName)] }],
       },
+      maxTurns: process.env.MAX_TURNS ? parseInt(process.env.MAX_TURNS, 10) : undefined,
     }
   })) {
     messageCount++;

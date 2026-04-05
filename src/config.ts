@@ -17,6 +17,8 @@ const envConfig = readEnvFile([
   'CLAUDE_CODE_ROUTER_ENABLED',
   'ROUTER_MODEL_INTERACTIVE',
   'ROUTER_MODEL_SCHEDULED',
+  'MAX_TURNS_INTERACTIVE',
+  'MAX_TURNS_SCHEDULED',
 ]);
 
 export const ASSISTANT_NAME =
@@ -67,6 +69,12 @@ export const MODEL_SCHEDULED = CLAUDE_CODE_ROUTER_ENABLED
     process.env.ROUTER_MODEL_SCHEDULED ||
     'deepseek-chat'
   : process.env.MODEL_SCHEDULED || 'claude-haiku-4-5-20251001';
+export const MAX_TURNS_INTERACTIVE =
+  envConfig.MAX_TURNS_INTERACTIVE || process.env.MAX_TURNS_INTERACTIVE || '';
+export const MAX_TURNS_SCHEDULED =
+  envConfig.MAX_TURNS_SCHEDULED ||
+  process.env.MAX_TURNS_SCHEDULED ||
+  '30';
 export const CONTAINER_TIMEOUT = parseInt(
   process.env.CONTAINER_TIMEOUT || '1800000',
   10,
