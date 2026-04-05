@@ -19,6 +19,41 @@ const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
 const DEEPSEEK_BASE = process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com';
 const DEFAULT_MODEL = process.env.ROUTER_MODEL || 'deepseek-chat';
 
+// --- Request tracking / token accounting ---
+
+let requestSeq = 0;
+let sessionInputTokens = 0;
+let sessionOutputTokens = 0;
+let sessionCacheHitTokens = 0;
+let sessionCacheMissTokens = 0;
+const sessionStart = Date.now();
+
+function logRequest(seq, { inputTokens, outputTokens, cacheHit, cacheMiss, model, toolCount, msgCount, systemChars, durationMs, stream, error }) {
+  sessionInputTokens += inputTokens || 0;
+  sessionOutputTokens += outputTokens || 0;
+  sessionCacheHitTokens += cacheHit || 0;
+  sessionCacheMissTokens += cacheMiss || 0;
+
+  const elapsed = ((Date.now() - sessionStart) / 1000).toFixed(0);
+  const parts = [
+    `[proxy] #${seq}`,
+    stream ? 'stream' : 'sync',
+    `model=${model}`,
+    `msgs=${msgCount}`,
+    `tools=${toolCount}`,
+    `sys=${systemChars}ch`,
+    `in=${(inputTokens || 0).toLocaleString()}`,
+    `out=${(outputTokens || 0).toLocaleString()}`,
+  ];
+  if (cacheHit) parts.push(`cache_hit=${cacheHit.toLocaleString()}`);
+  if (cacheMiss) parts.push(`cache_miss=${cacheMiss.toLocaleString()}`);
+  if (durationMs != null) parts.push(`${durationMs}ms`);
+  if (error) parts.push(`ERR=${error}`);
+  parts.push(`| session: in=${sessionInputTokens.toLocaleString()} out=${sessionOutputTokens.toLocaleString()} (${elapsed}s)`);
+
+  console.error(parts.join(' '));
+}
+
 // --- Anthropic → OpenAI format translation ---
 
 function anthropicToOpenAI(body) {
@@ -112,20 +147,25 @@ function anthropicToOpenAI(body) {
     }
   }
 
-  // Tools
-  const tools = (body.tools || []).map(t => ({
-    type: 'function',
-    function: {
-      name: t.name,
-      description: t.description || '',
-      parameters: t.input_schema || {},
-    },
-  }));
+  // Tools — ensure every parameters schema has type:"object" (DeepSeek rejects null/missing type)
+  const tools = (body.tools || []).map(t => {
+    const schema = t.input_schema || {};
+    if (!schema.type) schema.type = 'object';
+    if (!schema.properties) schema.properties = {};
+    return {
+      type: 'function',
+      function: {
+        name: t.name,
+        description: t.description || '',
+        parameters: schema,
+      },
+    };
+  });
 
   const result = {
     model: DEFAULT_MODEL,
     messages,
-    max_tokens: body.max_tokens || 4096,
+    max_tokens: Math.min(body.max_tokens || 4096, 8192),
     stream: !!body.stream,
   };
 
@@ -209,6 +249,8 @@ function createStreamTranslator(res, model) {
   let textBlockStarted = false;
   let currentToolId = null;
   let currentToolName = null;
+  // Expose usage from the final streaming chunk
+  const usage = { inputTokens: 0, outputTokens: 0, cacheHit: 0, cacheMiss: 0 };
 
   function sendEvent(type, data) {
     res.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`);
@@ -233,6 +275,7 @@ function createStreamTranslator(res, model) {
   }
 
   return {
+    getUsage() { return usage; },
     processChunk(chunk) {
       // Parse OpenAI SSE chunk
       if (chunk === '[DONE]') {
@@ -312,6 +355,14 @@ function createStreamTranslator(res, model) {
         }
       }
 
+      // Capture usage from any chunk that has it
+      if (data.usage) {
+        usage.inputTokens = data.usage.prompt_tokens || 0;
+        usage.outputTokens = data.usage.completion_tokens || 0;
+        usage.cacheHit = data.usage.prompt_cache_hit_tokens || 0;
+        usage.cacheMiss = data.usage.prompt_cache_miss_tokens || 0;
+      }
+
       // Check finish reason
       const finishReason = data.choices?.[0]?.finish_reason;
       if (finishReason) {
@@ -367,8 +418,17 @@ const server = http.createServer((req, res) => {
       return;
     }
 
+    const seq = ++requestSeq;
+    const reqStart = Date.now();
     const isStream = !!body.stream;
     const openAIBody = anthropicToOpenAI(body);
+
+    // Pre-request metadata
+    const msgCount = openAIBody.messages?.length || 0;
+    const toolCount = openAIBody.tools?.length || 0;
+    const systemChars = openAIBody.messages
+      ?.filter(m => m.role === 'system')
+      .reduce((sum, m) => sum + (m.content?.length || 0), 0) || 0;
 
     const payload = JSON.stringify(openAIBody);
     const upstream = new URL(DEEPSEEK_BASE);
@@ -392,6 +452,12 @@ const server = http.createServer((req, res) => {
         let errBody = '';
         upstreamRes.on('data', d => errBody += d);
         upstreamRes.on('end', () => {
+          logRequest(seq, {
+            model: openAIBody.model, toolCount, msgCount, systemChars, stream: isStream,
+            inputTokens: 0, outputTokens: 0,
+            durationMs: Date.now() - reqStart,
+            error: `${upstreamRes.statusCode}: ${errBody.slice(0, 120)}`,
+          });
           console.error(`[proxy] DeepSeek returned ${upstreamRes.statusCode}: ${errBody}`);
           res.writeHead(upstreamRes.statusCode || 500, { 'Content-Type': 'application/json' });
           try {
@@ -446,6 +512,13 @@ const server = http.createServer((req, res) => {
           if (buffer.startsWith('data: ')) {
             translator.processChunk(buffer.slice(6).trim());
           }
+          const u = translator.getUsage();
+          logRequest(seq, {
+            model: openAIBody.model, toolCount, msgCount, systemChars, stream: true,
+            inputTokens: u.inputTokens, outputTokens: u.outputTokens,
+            cacheHit: u.cacheHit, cacheMiss: u.cacheMiss,
+            durationMs: Date.now() - reqStart,
+          });
           res.end();
         });
       } else {
@@ -455,6 +528,14 @@ const server = http.createServer((req, res) => {
           try {
             const oaiResp = JSON.parse(respBody);
             const anthropicResp = openAIToAnthropic(oaiResp, body.model);
+            logRequest(seq, {
+              model: openAIBody.model, toolCount, msgCount, systemChars, stream: false,
+              inputTokens: oaiResp.usage?.prompt_tokens || 0,
+              outputTokens: oaiResp.usage?.completion_tokens || 0,
+              cacheHit: oaiResp.usage?.prompt_cache_hit_tokens || 0,
+              cacheMiss: oaiResp.usage?.prompt_cache_miss_tokens || 0,
+              durationMs: Date.now() - reqStart,
+            });
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(anthropicResp));
           } catch (err) {

@@ -58,15 +58,15 @@ export const CLAUDE_CODE_ROUTER_ENABLED =
 
 // Model selection: when router is enabled, use DeepSeek models; otherwise Anthropic
 export const MODEL_INTERACTIVE = CLAUDE_CODE_ROUTER_ENABLED
-  ? (envConfig.ROUTER_MODEL_INTERACTIVE ||
-      process.env.ROUTER_MODEL_INTERACTIVE ||
-      'deepseek-chat')
-  : (process.env.MODEL_INTERACTIVE || 'claude-sonnet-4-6');
+  ? envConfig.ROUTER_MODEL_INTERACTIVE ||
+    process.env.ROUTER_MODEL_INTERACTIVE ||
+    'deepseek-chat'
+  : process.env.MODEL_INTERACTIVE || 'claude-sonnet-4-6';
 export const MODEL_SCHEDULED = CLAUDE_CODE_ROUTER_ENABLED
-  ? (envConfig.ROUTER_MODEL_SCHEDULED ||
-      process.env.ROUTER_MODEL_SCHEDULED ||
-      'deepseek-chat')
-  : (process.env.MODEL_SCHEDULED || 'claude-haiku-4-5-20251001');
+  ? envConfig.ROUTER_MODEL_SCHEDULED ||
+    process.env.ROUTER_MODEL_SCHEDULED ||
+    'deepseek-chat'
+  : process.env.MODEL_SCHEDULED || 'claude-haiku-4-5-20251001';
 export const CONTAINER_TIMEOUT = parseInt(
   process.env.CONTAINER_TIMEOUT || '1800000',
   10,
