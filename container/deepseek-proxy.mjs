@@ -57,7 +57,7 @@ function logRequest(seq, { inputTokens, outputTokens, cacheHit, cacheMiss, model
 // --- Context window management ---
 
 // DeepSeek context limit (tokens). Leave headroom for completion.
-const CONTEXT_LIMIT = parseInt(process.env.DEEPSEEK_CONTEXT_LIMIT || '131072', 10);
+const CONTEXT_LIMIT = parseInt(process.env.DEEPSEEK_CONTEXT_LIMIT || '65536', 10);
 const COMPLETION_RESERVE = 8192;
 const INPUT_LIMIT = CONTEXT_LIMIT - COMPLETION_RESERVE;
 
@@ -213,8 +213,25 @@ function anthropicToOpenAI(body) {
     }
   }
 
+  // Tool allowlist: only send tools the agent actually uses to DeepSeek.
+  // The Claude Agent SDK injects extra tools (Agent, Task*, Cron*, NotebookEdit, etc.)
+  // beyond what's in allowedTools — strip them to save ~5-8K tokens per request.
+  const TOOL_ALLOWLIST = new Set([
+    'Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep',
+    'WebSearch', 'WebFetch', 'TodoWrite', 'Skill',
+    'Agent', 'SendMessage',
+  ]);
+  const TOOL_PREFIX_ALLOWLIST = ['mcp__nanoclaw__'];
+
+  function isToolAllowed(name) {
+    if (TOOL_ALLOWLIST.has(name)) return true;
+    return TOOL_PREFIX_ALLOWLIST.some(p => name.startsWith(p));
+  }
+
   // Tools — ensure every parameters schema has type:"object" (DeepSeek rejects null/missing type)
-  const tools = (body.tools || []).map(t => {
+  const allTools = (body.tools || []);
+  const filteredCount = allTools.length;
+  const tools = allTools.filter(t => isToolAllowed(t.name)).map(t => {
     const schema = t.input_schema || {};
     if (!schema.type) schema.type = 'object';
     if (!schema.properties) schema.properties = {};
@@ -227,6 +244,9 @@ function anthropicToOpenAI(body) {
       },
     };
   });
+  if (tools.length < filteredCount && requestSeq <= 1) {
+    console.error(`[proxy] Tool filter: kept ${tools.length}/${filteredCount} tools`);
+  }
 
   // Truncate to fit DeepSeek's context window
   const fittedMessages = truncateMessages(messages, tools);

@@ -338,6 +338,7 @@ function buildContainerArgs(
   const routerEnv = readEnvFile([
     'CLAUDE_CODE_ROUTER_ENABLED',
     'DEEPSEEK_API_KEY',
+    'DEEPSEEK_CONTEXT_LIMIT',
     'ROUTER_MODEL_INTERACTIVE',
     'ROUTER_MODEL_SCHEDULED',
   ]);
@@ -349,6 +350,9 @@ function buildContainerArgs(
     const deepseekKey =
       routerEnv.DEEPSEEK_API_KEY || process.env.DEEPSEEK_API_KEY;
     if (deepseekKey) args.push('-e', `DEEPSEEK_API_KEY=${deepseekKey}`);
+    const contextLimit =
+      routerEnv.DEEPSEEK_CONTEXT_LIMIT || process.env.DEEPSEEK_CONTEXT_LIMIT;
+    if (contextLimit) args.push('-e', `DEEPSEEK_CONTEXT_LIMIT=${contextLimit}`);
     args.push('-e', `ROUTER_MODEL=${model}`);
   }
 
