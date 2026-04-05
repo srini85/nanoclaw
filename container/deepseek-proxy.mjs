@@ -54,6 +54,80 @@ function logRequest(seq, { inputTokens, outputTokens, cacheHit, cacheMiss, model
   console.error(parts.join(' '));
 }
 
+// --- Context window management ---
+
+// DeepSeek context limit (tokens). Leave headroom for completion.
+const CONTEXT_LIMIT = parseInt(process.env.DEEPSEEK_CONTEXT_LIMIT || '131072', 10);
+const COMPLETION_RESERVE = 8192;
+const INPUT_LIMIT = CONTEXT_LIMIT - COMPLETION_RESERVE;
+
+/** Rough token estimate: ~4 chars per token for English/code mixed content */
+function estimateTokens(text) {
+  if (!text) return 0;
+  return Math.ceil(text.length / 4);
+}
+
+function estimateMessageTokens(msg) {
+  let tokens = 4; // role + framing overhead
+  if (typeof msg.content === 'string') {
+    tokens += estimateTokens(msg.content);
+  }
+  if (msg.tool_calls) {
+    for (const tc of msg.tool_calls) {
+      tokens += estimateTokens(tc.function?.name) + estimateTokens(tc.function?.arguments) + 10;
+    }
+  }
+  return tokens;
+}
+
+/**
+ * Truncate messages to fit within DeepSeek's context window.
+ * Keeps: system message (first), the last N messages that fit.
+ * Also keeps tool-result chains intact (tool msg must follow its assistant tool_calls).
+ */
+function truncateMessages(messages, tools) {
+  // Estimate tool definition tokens (~150 tokens per tool on average)
+  const toolTokens = (tools?.length || 0) * 150;
+  const systemMsg = messages[0]?.role === 'system' ? messages[0] : null;
+  const systemTokens = systemMsg ? estimateMessageTokens(systemMsg) : 0;
+  const budget = INPUT_LIMIT - toolTokens - systemTokens;
+
+  if (budget <= 0) return messages; // Can't do much, let it fail naturally
+
+  // Walk messages from the end, accumulating until we exceed budget
+  const nonSystem = systemMsg ? messages.slice(1) : messages;
+  let total = 0;
+  let cutoff = nonSystem.length;
+
+  for (let i = nonSystem.length - 1; i >= 0; i--) {
+    const cost = estimateMessageTokens(nonSystem[i]);
+    if (total + cost > budget) {
+      cutoff = i + 1;
+      break;
+    }
+    total += cost;
+    if (i === 0) cutoff = 0;
+  }
+
+  if (cutoff === 0) return messages; // Everything fits
+
+  // Ensure we don't start mid-tool-chain: if first kept message is role=tool,
+  // skip forward until we hit a non-tool message
+  while (cutoff < nonSystem.length && nonSystem[cutoff].role === 'tool') {
+    cutoff++;
+  }
+
+  const kept = nonSystem.slice(cutoff);
+  if (kept.length === 0) return messages; // Safety: keep everything if truncation is too aggressive
+
+  const truncated = systemMsg ? [systemMsg, ...kept] : kept;
+  const dropped = nonSystem.length - kept.length;
+  if (dropped > 0) {
+    console.error(`[proxy] Context truncation: dropped ${dropped} oldest messages (est. ${total} tokens kept of ${budget} budget)`);
+  }
+  return truncated;
+}
+
 // --- Anthropic → OpenAI format translation ---
 
 function anthropicToOpenAI(body) {
@@ -162,9 +236,12 @@ function anthropicToOpenAI(body) {
     };
   });
 
+  // Truncate to fit DeepSeek's context window
+  const fittedMessages = truncateMessages(messages, tools);
+
   const result = {
     model: DEFAULT_MODEL,
-    messages,
+    messages: fittedMessages,
     max_tokens: Math.min(body.max_tokens || 4096, 8192),
     stream: !!body.stream,
   };
