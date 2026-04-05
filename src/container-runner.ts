@@ -332,6 +332,24 @@ function buildContainerArgs(
     if (val) args.push('-e', `${key}=${val}`);
   }
 
+  // Pass claude-code-router config if enabled
+  const routerEnv = readEnvFile([
+    'CLAUDE_CODE_ROUTER_ENABLED',
+    'DEEPSEEK_API_KEY',
+    'ROUTER_MODEL_INTERACTIVE',
+    'ROUTER_MODEL_SCHEDULED',
+  ]);
+  const routerEnabled =
+    (routerEnv.CLAUDE_CODE_ROUTER_ENABLED ||
+      process.env.CLAUDE_CODE_ROUTER_ENABLED) === 'true';
+  if (routerEnabled) {
+    args.push('-e', 'CLAUDE_CODE_ROUTER_ENABLED=true');
+    const deepseekKey =
+      routerEnv.DEEPSEEK_API_KEY || process.env.DEEPSEEK_API_KEY;
+    if (deepseekKey) args.push('-e', `DEEPSEEK_API_KEY=${deepseekKey}`);
+    args.push('-e', `ROUTER_MODEL=${model}`);
+  }
+
   // Run as host user so bind-mounted files are accessible.
   // Skip when running as root (uid 0), as the container's node user (uid 1000),
   // or when getuid is unavailable (native Windows without WSL).

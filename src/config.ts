@@ -14,6 +14,9 @@ const envConfig = readEnvFile([
   'DASHBOARD_PORT',
   'TELEGRAM_BOT_POOL',
   'TZ',
+  'CLAUDE_CODE_ROUTER_ENABLED',
+  'ROUTER_MODEL_INTERACTIVE',
+  'ROUTER_MODEL_SCHEDULED',
 ]);
 
 export const ASSISTANT_NAME =
@@ -48,11 +51,22 @@ export const DATA_DIR = path.resolve(PROJECT_ROOT, 'data');
 export const CONTAINER_IMAGE =
   process.env.CONTAINER_IMAGE || 'nanoclaw-agent:latest';
 
-// Model selection: scheduled tasks use a cheaper model, interactive uses the default
-export const MODEL_INTERACTIVE =
-  process.env.MODEL_INTERACTIVE || 'claude-sonnet-4-6';
-export const MODEL_SCHEDULED =
-  process.env.MODEL_SCHEDULED || 'claude-haiku-4-5-20251001';
+// Claude Code Router: when enabled, use router model names instead of Anthropic models
+export const CLAUDE_CODE_ROUTER_ENABLED =
+  (envConfig.CLAUDE_CODE_ROUTER_ENABLED ||
+    process.env.CLAUDE_CODE_ROUTER_ENABLED) === 'true';
+
+// Model selection: when router is enabled, use DeepSeek models; otherwise Anthropic
+export const MODEL_INTERACTIVE = CLAUDE_CODE_ROUTER_ENABLED
+  ? (envConfig.ROUTER_MODEL_INTERACTIVE ||
+      process.env.ROUTER_MODEL_INTERACTIVE ||
+      'deepseek-chat')
+  : (process.env.MODEL_INTERACTIVE || 'claude-sonnet-4-6');
+export const MODEL_SCHEDULED = CLAUDE_CODE_ROUTER_ENABLED
+  ? (envConfig.ROUTER_MODEL_SCHEDULED ||
+      process.env.ROUTER_MODEL_SCHEDULED ||
+      'deepseek-chat')
+  : (process.env.MODEL_SCHEDULED || 'claude-haiku-4-5-20251001');
 export const CONTAINER_TIMEOUT = parseInt(
   process.env.CONTAINER_TIMEOUT || '1800000',
   10,
