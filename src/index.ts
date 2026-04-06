@@ -4,12 +4,14 @@ import path from 'path';
 import {
   ASSISTANT_NAME,
   CREDENTIAL_PROXY_PORT,
+  DATA_DIR,
   DEFAULT_TRIGGER,
   getTriggerPattern,
   GROUPS_DIR,
   IDLE_TIMEOUT,
   MAX_MESSAGES_PER_PROMPT,
   POLL_INTERVAL,
+  SESSION_MAX_SIZE_BYTES,
   TELEGRAM_BOT_POOL,
   TIMEZONE,
 } from './config.js';
@@ -320,7 +322,37 @@ async function runAgent(
   onOutput?: (output: ContainerOutput) => Promise<void>,
 ): Promise<'success' | 'error'> {
   const isMain = group.isMain === true;
-  const sessionId = sessions[group.folder];
+  let sessionId: string | undefined = sessions[group.folder];
+
+  // Roll over session if the file exceeds SESSION_MAX_SIZE_MB
+  if (sessionId && SESSION_MAX_SIZE_BYTES > 0) {
+    const sessionFile = path.join(
+      DATA_DIR,
+      'sessions',
+      group.folder,
+      '.claude',
+      'projects',
+      '-workspace-group',
+      `${sessionId}.jsonl`,
+    );
+    try {
+      const stat = fs.statSync(sessionFile);
+      if (stat.size > SESSION_MAX_SIZE_BYTES) {
+        logger.info(
+          {
+            group: group.name,
+            sessionId,
+            sizeMB: (stat.size / 1048576).toFixed(1),
+            limitMB: (SESSION_MAX_SIZE_BYTES / 1048576).toFixed(1),
+          },
+          'Session file exceeds size limit, starting fresh session',
+        );
+        sessionId = undefined;
+      }
+    } catch {
+      // File doesn't exist yet — that's fine
+    }
+  }
 
   // Update tasks snapshot for container to read (filtered by group)
   const tasks = getAllTasks();

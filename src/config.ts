@@ -20,6 +20,7 @@ const envConfig = readEnvFile([
   'MAX_TURNS_INTERACTIVE',
   'MAX_TURNS_SCHEDULED',
   'TASK_CONTEXT_MODE',
+  'SESSION_MAX_SIZE_MB',
 ]);
 
 export const ASSISTANT_NAME =
@@ -102,6 +103,16 @@ export const TASK_CONTEXT_MODE: 'group' | 'isolated' =
   (envConfig.TASK_CONTEXT_MODE || process.env.TASK_CONTEXT_MODE) === 'group'
     ? 'group'
     : 'isolated';
+// Maximum session file size before rolling over to a new session.
+// When the .jsonl file exceeds this size, the session ID is cleared so
+// the next invocation starts a fresh conversation.
+export const SESSION_MAX_SIZE_BYTES = Math.round(
+  parseFloat(
+    envConfig.SESSION_MAX_SIZE_MB ||
+      process.env.SESSION_MAX_SIZE_MB ||
+      '0.5',
+  ) * 1048576,
+);
 export const IPC_POLL_INTERVAL = 1000;
 export const IDLE_TIMEOUT = parseInt(process.env.IDLE_TIMEOUT || '1800000', 10); // 30min default — how long to keep container alive after last result
 export const MAX_CONCURRENT_CONTAINERS = Math.max(
