@@ -19,6 +19,7 @@ const envConfig = readEnvFile([
   'ROUTER_MODEL_SCHEDULED',
   'MAX_TURNS_INTERACTIVE',
   'MAX_TURNS_SCHEDULED',
+  'TASK_CONTEXT_MODE',
 ]);
 
 export const ASSISTANT_NAME =
@@ -72,9 +73,7 @@ export const MODEL_SCHEDULED = CLAUDE_CODE_ROUTER_ENABLED
 export const MAX_TURNS_INTERACTIVE =
   envConfig.MAX_TURNS_INTERACTIVE || process.env.MAX_TURNS_INTERACTIVE || '';
 export const MAX_TURNS_SCHEDULED =
-  envConfig.MAX_TURNS_SCHEDULED ||
-  process.env.MAX_TURNS_SCHEDULED ||
-  '30';
+  envConfig.MAX_TURNS_SCHEDULED || process.env.MAX_TURNS_SCHEDULED || '30';
 export const CONTAINER_TIMEOUT = parseInt(
   process.env.CONTAINER_TIMEOUT || '1800000',
   10,
@@ -97,6 +96,12 @@ export const MAX_MESSAGES_PER_PROMPT = Math.max(
   1,
   parseInt(process.env.MAX_MESSAGES_PER_PROMPT || '10', 10) || 10,
 );
+// Context mode for scheduled tasks: 'isolated' (default) starts a fresh session,
+// 'group' reuses the group's conversation history (can be very large).
+export const TASK_CONTEXT_MODE: 'group' | 'isolated' =
+  (envConfig.TASK_CONTEXT_MODE || process.env.TASK_CONTEXT_MODE) === 'group'
+    ? 'group'
+    : 'isolated';
 export const IPC_POLL_INTERVAL = 1000;
 export const IDLE_TIMEOUT = parseInt(process.env.IDLE_TIMEOUT || '1800000', 10); // 30min default — how long to keep container alive after last result
 export const MAX_CONCURRENT_CONTAINERS = Math.max(
