@@ -21,6 +21,7 @@ const envConfig = readEnvFile([
   'MAX_TURNS_SCHEDULED',
   'TASK_CONTEXT_MODE',
   'SESSION_MAX_SIZE_MB',
+  'ONECLI_URL',
 ]);
 
 export const ASSISTANT_NAME =
@@ -93,6 +94,7 @@ export const DASHBOARD_PORT = parseInt(
   envConfig.DASHBOARD_PORT || process.env.DASHBOARD_PORT || '3100',
   10,
 );
+export const ONECLI_URL = process.env.ONECLI_URL || envConfig.ONECLI_URL;
 export const MAX_MESSAGES_PER_PROMPT = Math.max(
   1,
   parseInt(process.env.MAX_MESSAGES_PER_PROMPT || '10', 10) || 10,

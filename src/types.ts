@@ -53,6 +53,10 @@ export interface NewMessage {
   is_bot_message?: boolean;
   // Local file path of a downloaded attachment (image, document, etc.)
   attachment?: string;
+  thread_id?: string;
+  reply_to_message_id?: string;
+  reply_to_message_content?: string;
+  reply_to_sender_name?: string;
 }
 
 export interface ScheduledTask {
