@@ -25,6 +25,7 @@ import {
 } from './channels/registry.js';
 import {
   ContainerOutput,
+  parseTokenStats,
   runContainerAgent,
   writeGroupsSnapshot,
   writeTasksSnapshot,
@@ -48,6 +49,8 @@ import {
   setRegisteredGroup,
   setRouterState,
   setSession,
+  logTokenUsage,
+  purgeOldTokenUsage,
   storeChatMetadata,
   storeMessage,
 } from './db.js';
@@ -323,6 +326,7 @@ async function runAgent(
   chatJid: string,
   onOutput?: (output: ContainerOutput) => Promise<void>,
 ): Promise<'success' | 'error'> {
+  const startTime = Date.now();
   const isMain = group.isMain === true;
   let sessionId: string | undefined = sessions[group.folder];
 
@@ -412,6 +416,23 @@ async function runAgent(
     if (output.newSessionId) {
       sessions[group.folder] = output.newSessionId;
       setSession(group.folder, output.newSessionId);
+    }
+
+    // Log token usage from proxy stderr
+    if (output.stderr) {
+      const stats = parseTokenStats(output.stderr);
+      if (stats) {
+        logTokenUsage({
+          group_folder: group.folder,
+          run_type: 'interactive',
+          turns: stats.turns,
+          input_tokens: stats.inputTokens,
+          output_tokens: stats.outputTokens,
+          cache_hit_tokens: stats.cacheHitTokens,
+          cache_miss_tokens: stats.cacheMissTokens,
+          duration_ms: Date.now() - startTime,
+        });
+      }
     }
 
     if (output.status === 'error') {

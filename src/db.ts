@@ -65,6 +65,22 @@ function createSchema(database: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_task_run_logs ON task_run_logs(task_id, run_at);
 
+    CREATE TABLE IF NOT EXISTS token_usage (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      group_folder TEXT NOT NULL,
+      run_type TEXT NOT NULL,
+      task_id TEXT,
+      turns INTEGER NOT NULL DEFAULT 0,
+      input_tokens INTEGER NOT NULL DEFAULT 0,
+      output_tokens INTEGER NOT NULL DEFAULT 0,
+      cache_hit_tokens INTEGER NOT NULL DEFAULT 0,
+      cache_miss_tokens INTEGER NOT NULL DEFAULT 0,
+      duration_ms INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_token_usage_created ON token_usage(created_at);
+    CREATE INDEX IF NOT EXISTS idx_token_usage_group ON token_usage(group_folder);
+
     CREATE TABLE IF NOT EXISTS router_state (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
@@ -761,4 +777,149 @@ function migrateJsonState(): void {
       }
     }
   }
+}
+
+// --- Token usage accessors ---
+
+export interface TokenUsageRecord {
+  group_folder: string;
+  run_type: 'interactive' | 'scheduled';
+  task_id?: string | null;
+  turns: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_hit_tokens: number;
+  cache_miss_tokens: number;
+  duration_ms: number;
+}
+
+export function logTokenUsage(record: TokenUsageRecord): void {
+  db.prepare(
+    `INSERT INTO token_usage (group_folder, run_type, task_id, turns, input_tokens, output_tokens, cache_hit_tokens, cache_miss_tokens, duration_ms, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    record.group_folder,
+    record.run_type,
+    record.task_id || null,
+    record.turns,
+    record.input_tokens,
+    record.output_tokens,
+    record.cache_hit_tokens,
+    record.cache_miss_tokens,
+    record.duration_ms,
+    new Date().toISOString(),
+  );
+}
+
+export interface TokenUsageSummary {
+  total_runs: number;
+  total_turns: number;
+  total_input_tokens: number;
+  total_output_tokens: number;
+  total_cache_hit_tokens: number;
+  total_cache_miss_tokens: number;
+  avg_input_per_run: number;
+  avg_turns_per_run: number;
+}
+
+export function getTokenUsageSummary(
+  since?: string,
+  groupFolder?: string,
+): TokenUsageSummary {
+  const conditions: string[] = [];
+  const params: string[] = [];
+
+  if (since) {
+    conditions.push('created_at >= ?');
+    params.push(since);
+  }
+  if (groupFolder) {
+    conditions.push('group_folder = ?');
+    params.push(groupFolder);
+  }
+
+  const where = conditions.length
+    ? `WHERE ${conditions.join(' AND ')}`
+    : '';
+
+  const row = db
+    .prepare(
+      `SELECT
+        COUNT(*) as total_runs,
+        COALESCE(SUM(turns), 0) as total_turns,
+        COALESCE(SUM(input_tokens), 0) as total_input_tokens,
+        COALESCE(SUM(output_tokens), 0) as total_output_tokens,
+        COALESCE(SUM(cache_hit_tokens), 0) as total_cache_hit_tokens,
+        COALESCE(SUM(cache_miss_tokens), 0) as total_cache_miss_tokens
+      FROM token_usage ${where}`,
+    )
+    .get(...params) as {
+    total_runs: number;
+    total_turns: number;
+    total_input_tokens: number;
+    total_output_tokens: number;
+    total_cache_hit_tokens: number;
+    total_cache_miss_tokens: number;
+  };
+
+  return {
+    ...row,
+    avg_input_per_run: row.total_runs
+      ? Math.round(row.total_input_tokens / row.total_runs)
+      : 0,
+    avg_turns_per_run: row.total_runs
+      ? Math.round(row.total_turns / row.total_runs)
+      : 0,
+  };
+}
+
+export function getTokenUsageByType(
+  since?: string,
+): Array<{ run_type: string } & TokenUsageSummary> {
+  const where = since ? 'WHERE created_at >= ?' : '';
+  const params = since ? [since] : [];
+
+  return db
+    .prepare(
+      `SELECT
+        run_type,
+        COUNT(*) as total_runs,
+        COALESCE(SUM(turns), 0) as total_turns,
+        COALESCE(SUM(input_tokens), 0) as total_input_tokens,
+        COALESCE(SUM(output_tokens), 0) as total_output_tokens,
+        COALESCE(SUM(cache_hit_tokens), 0) as total_cache_hit_tokens,
+        COALESCE(SUM(cache_miss_tokens), 0) as total_cache_miss_tokens
+      FROM token_usage ${where}
+      GROUP BY run_type`,
+    )
+    .all(...params)
+    .map((row: any) => ({
+      ...row,
+      avg_input_per_run: row.total_runs
+        ? Math.round(row.total_input_tokens / row.total_runs)
+        : 0,
+      avg_turns_per_run: row.total_runs
+        ? Math.round(row.total_turns / row.total_runs)
+        : 0,
+    }));
+}
+
+export function getRecentTokenUsage(
+  limit = 20,
+): Array<TokenUsageRecord & { id: number; created_at: string }> {
+  return db
+    .prepare(
+      `SELECT * FROM token_usage ORDER BY created_at DESC LIMIT ?`,
+    )
+    .all(limit) as Array<TokenUsageRecord & { id: number; created_at: string }>;
+}
+
+export function purgeOldTokenUsage(daysToKeep = 7): number {
+  const cutoff = new Date(
+    Date.now() - daysToKeep * 24 * 60 * 60 * 1000,
+  ).toISOString();
+  const result = db
+    .prepare('DELETE FROM token_usage WHERE created_at < ?')
+    .run(cutoff);
+  return result.changes;
 }

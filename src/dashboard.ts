@@ -6,8 +6,11 @@ import { DASHBOARD_PORT, TIMEZONE } from './config.js';
 import {
   deleteTask,
   getAllTasks,
+  getRecentTokenUsage,
   getTaskById,
   getTaskRunLogs,
+  getTokenUsageByType,
+  getTokenUsageSummary,
   updateTask,
 } from './db.js';
 import { logger } from './logger.js';
@@ -638,6 +641,21 @@ async function handleRequest(
     const id = decodeURIComponent(logsMatch[1]);
     const logs = getTaskRunLogs(id, 50);
     jsonResponse(res, 200, logs);
+    return;
+  }
+
+  // GET /api/token-usage — summary, breakdown by type, and recent runs
+  if (method === 'GET' && path === '/api/token-usage') {
+    const url = new URL(req.url!, `http://${req.headers.host}`);
+    const since = url.searchParams.get('since') || undefined;
+    const group = url.searchParams.get('group') || undefined;
+    const limit = parseInt(url.searchParams.get('limit') || '20', 10);
+
+    jsonResponse(res, 200, {
+      summary: getTokenUsageSummary(since, group),
+      by_type: getTokenUsageByType(since),
+      recent: getRecentTokenUsage(limit),
+    });
     return;
   }
 

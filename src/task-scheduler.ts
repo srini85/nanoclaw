@@ -10,6 +10,7 @@ import {
 } from './config.js';
 import {
   ContainerOutput,
+  parseTokenStats,
   runContainerAgent,
   writeTasksSnapshot,
 } from './container-runner.js';
@@ -18,6 +19,8 @@ import {
   getDueTasks,
   getTaskById,
   logTaskRun,
+  logTokenUsage,
+  purgeOldTokenUsage,
   updateTask,
   updateTaskAfterRun,
 } from './db.js';
@@ -216,6 +219,24 @@ async function runTask(
       result = output.result;
     }
 
+    // Log token usage from proxy stderr
+    if (output.stderr) {
+      const stats = parseTokenStats(output.stderr);
+      if (stats) {
+        logTokenUsage({
+          group_folder: task.group_folder,
+          run_type: 'scheduled',
+          task_id: task.id,
+          turns: stats.turns,
+          input_tokens: stats.inputTokens,
+          output_tokens: stats.outputTokens,
+          cache_hit_tokens: stats.cacheHitTokens,
+          cache_miss_tokens: stats.cacheMissTokens,
+          duration_ms: Date.now() - startTime,
+        });
+      }
+    }
+
     logger.info(
       { taskId: task.id, durationMs: Date.now() - startTime },
       'Task completed',
@@ -247,6 +268,7 @@ async function runTask(
 }
 
 let schedulerRunning = false;
+let lastPurgeDate = '';
 
 export function startSchedulerLoop(deps: SchedulerDependencies): void {
   if (schedulerRunning) {
@@ -257,6 +279,15 @@ export function startSchedulerLoop(deps: SchedulerDependencies): void {
   logger.info('Scheduler loop started');
 
   const loop = async () => {
+    // Purge old token usage once per day
+    const today = new Date().toISOString().slice(0, 10);
+    if (today !== lastPurgeDate) {
+      lastPurgeDate = today;
+      const purged = purgeOldTokenUsage(7);
+      if (purged > 0) {
+        logger.info({ purged }, 'Purged old token usage records');
+      }
+    }
     try {
       const dueTasks = getDueTasks();
       if (dueTasks.length > 0) {

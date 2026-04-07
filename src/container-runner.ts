@@ -54,6 +54,55 @@ export interface ContainerOutput {
   result: string | null;
   newSessionId?: string;
   error?: string;
+  stderr?: string;
+}
+
+export interface TokenStats {
+  turns: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheHitTokens: number;
+  cacheMissTokens: number;
+}
+
+/**
+ * Parse the DeepSeek proxy's stderr log lines to extract final session token totals.
+ * Looks for the last `[proxy] #N ... | session: in=X out=Y (Zs)` line and
+ * per-request cache stats.
+ */
+export function parseTokenStats(stderr: string): TokenStats | null {
+  const lines = stderr.split('\n').filter((l) => l.includes('[proxy] #'));
+  if (lines.length === 0) return null;
+
+  const lastLine = lines[lines.length - 1];
+
+  // Extract session totals from the last line
+  const sessionMatch = lastLine.match(
+    /session: in=([\d,]+) out=([\d,]+)/,
+  );
+  if (!sessionMatch) return null;
+
+  const inputTokens = parseInt(sessionMatch[1].replace(/,/g, ''), 10);
+  const outputTokens = parseInt(sessionMatch[2].replace(/,/g, ''), 10);
+
+  // Sum cache stats across all requests
+  let cacheHitTokens = 0;
+  let cacheMissTokens = 0;
+  for (const line of lines) {
+    const hitMatch = line.match(/cache_hit=([\d,]+)/);
+    const missMatch = line.match(/cache_miss=([\d,]+)/);
+    if (hitMatch) cacheHitTokens += parseInt(hitMatch[1].replace(/,/g, ''), 10);
+    if (missMatch)
+      cacheMissTokens += parseInt(missMatch[1].replace(/,/g, ''), 10);
+  }
+
+  return {
+    turns: lines.length,
+    inputTokens,
+    outputTokens,
+    cacheHitTokens,
+    cacheMissTokens,
+  };
 }
 
 interface VolumeMount {
@@ -70,9 +119,10 @@ function buildVolumeMounts(
   const projectRoot = process.cwd();
   const groupDir = resolveGroupFolderPath(group.folder);
 
-  // Global memory directory (read-only for all groups)
+  // Global memory directory (read-only for non-main groups;
+  // main gets a writable mount below, so skip the read-only one here)
   const globalDir = path.join(GROUPS_DIR, 'global');
-  if (fs.existsSync(globalDir)) {
+  if (!isMain && fs.existsSync(globalDir)) {
     mounts.push({
       hostPath: globalDir,
       containerPath: '/workspace/global',
@@ -725,6 +775,7 @@ export async function runContainerAgent(
             status: 'success',
             result: null,
             newSessionId,
+            stderr,
           });
         });
         return;
