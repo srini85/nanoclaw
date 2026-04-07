@@ -108,9 +108,7 @@ export const TASK_CONTEXT_MODE: 'group' | 'isolated' =
 // the next invocation starts a fresh conversation.
 export const SESSION_MAX_SIZE_BYTES = Math.round(
   parseFloat(
-    envConfig.SESSION_MAX_SIZE_MB ||
-      process.env.SESSION_MAX_SIZE_MB ||
-      '0.5',
+    envConfig.SESSION_MAX_SIZE_MB || process.env.SESSION_MAX_SIZE_MB || '0.5',
   ) * 1048576,
 );
 export const IPC_POLL_INTERVAL = 1000;
