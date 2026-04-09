@@ -306,7 +306,10 @@ function transformSegmentHtml(text: string): string {
   let t = escapeHtml(text);
 
   // 1. Italic: *text* → <i>text</i> (before bold to avoid matching **)
-  t = t.replace(/(?<!\*)\*(?=[^\s*])([^*\n]+?)(?<=[^\s*])\*(?!\*)/g, '<i>$1</i>');
+  t = t.replace(
+    /(?<!\*)\*(?=[^\s*])([^*\n]+?)(?<=[^\s*])\*(?!\*)/g,
+    '<i>$1</i>',
+  );
 
   // 2. Bold: **text** → <b>text</b>
   t = t.replace(/\*\*(?=[^\s*])([^*]+?)(?<=[^\s*])\*\*/g, '<b>$1</b>');
