@@ -414,9 +414,7 @@ describe('parseTextStyles — headings', () => {
   });
 
   it('converts ### heading on telegram', () => {
-    expect(parseTextStyles('### Section', 'telegram')).toBe(
-      '<b>Section</b>',
-    );
+    expect(parseTextStyles('### Section', 'telegram')).toBe('<b>Section</b>');
   });
 
   it('only converts headings at line start', () => {
