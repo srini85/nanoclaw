@@ -112,7 +112,7 @@ export async function sendPoolMessage(
   const numericId = chatId.replace(/^tg:/, '');
   const sendChunk = async (chunk: string): Promise<void> => {
     try {
-      await api.sendMessage(numericId, chunk, { parse_mode: 'Markdown' });
+      await api.sendMessage(numericId, chunk, { parse_mode: 'HTML' });
     } catch {
       await api.sendMessage(numericId, chunk);
     }
@@ -172,8 +172,8 @@ export class TelegramChannel implements Channel {
           : (ctx.chat as any).title || 'Unknown';
 
       ctx.reply(
-        `Chat ID: \`tg:${chatId}\`\nName: ${chatName}\nType: ${chatType}`,
-        { parse_mode: 'Markdown' },
+        `Chat ID: <code>tg:${chatId}</code>\nName: ${chatName}\nType: ${chatType}`,
+        { parse_mode: 'HTML' },
       );
     });
 
@@ -454,7 +454,7 @@ export class TelegramChannel implements Channel {
     const sendChunk = async (chunk: string): Promise<void> => {
       try {
         await this.bot!.api.sendMessage(numericId, chunk, {
-          parse_mode: 'Markdown',
+          parse_mode: 'HTML',
         });
       } catch {
         // Markdown parse failed (unbalanced markers etc.) — retry as plain text

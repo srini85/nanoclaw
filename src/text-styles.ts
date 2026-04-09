@@ -26,6 +26,9 @@ export function parseTextStyles(text: string, channel: ChannelType): string {
   // Discord is already Markdown; Signal uses parseSignalStyles() for rich text.
   if (channel === 'discord' || channel === 'signal') return text;
 
+  // Telegram uses HTML parse_mode for reliability — needs different handling.
+  if (channel === 'telegram') return transformTelegramHtml(text);
+
   // Split into protected (code) and unprotected regions, transform only the latter.
   const segments = splitProtectedRegions(text);
   return segments
@@ -267,7 +270,68 @@ function findClosingUnderscore(s: string, from: number): number {
 }
 
 // ---------------------------------------------------------------------------
-// Marker-substitution helpers (WhatsApp / Telegram / Slack)
+// Telegram HTML formatting
+// ---------------------------------------------------------------------------
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/**
+ * Convert Claude's Markdown to Telegram HTML.
+ * Telegram's HTML parse mode is far more reliable than legacy Markdown.
+ * Supported tags: <b>, <i>, <code>, <pre>, <a href="...">, <s>
+ */
+function transformTelegramHtml(text: string): string {
+  const segments = splitProtectedRegions(text);
+  return segments
+    .map(({ content, protected: isProtected }) => {
+      if (isProtected) {
+        // Fenced code block: ```lang\n...\n``` → <pre>...</pre>
+        const fenced = content.match(/^```[^\n]*\n([\s\S]*?)```$/);
+        if (fenced) return `<pre>${escapeHtml(fenced[1])}</pre>`;
+        // Inline code: `...` → <code>...</code>
+        const inline = content.match(/^`([^`]+)`$/);
+        if (inline) return `<code>${escapeHtml(inline[1])}</code>`;
+        return escapeHtml(content);
+      }
+      return transformSegmentHtml(content);
+    })
+    .join('');
+}
+
+/** Apply HTML transformations to a non-code segment for Telegram. */
+function transformSegmentHtml(text: string): string {
+  // Escape HTML entities first, then apply formatting
+  let t = escapeHtml(text);
+
+  // 1. Italic: *text* → <i>text</i> (before bold to avoid matching **)
+  t = t.replace(/(?<!\*)\*(?=[^\s*])([^*\n]+?)(?<=[^\s*])\*(?!\*)/g, '<i>$1</i>');
+
+  // 2. Bold: **text** → <b>text</b>
+  t = t.replace(/\*\*(?=[^\s*])([^*]+?)(?<=[^\s*])\*\*/g, '<b>$1</b>');
+
+  // 3. Headings: ## Title → <b>Title</b>
+  //    Strip any bold tags from the heading content to avoid nesting
+  t = t.replace(/^#{1,6}\s+(.+)$/gm, (_match, content: string) => {
+    const stripped = content.replace(/<b>([^<]+)<\/b>/g, '$1');
+    return `<b>${stripped}</b>`;
+  });
+
+  // 4. Links: [text](url) → <a href="url">text</a>
+  t = t.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+
+  // 5. Tables
+  t = convertTables(t);
+
+  // 6. Horizontal rules: strip them
+  t = t.replace(/^(-{3,}|\*{3,}|_{3,})$/gm, '');
+
+  return t;
+}
+
+// ---------------------------------------------------------------------------
+// Marker-substitution helpers (WhatsApp / Slack)
 // ---------------------------------------------------------------------------
 
 interface Segment {
@@ -328,8 +392,7 @@ function convertTables(text: string): string {
         .map((c: string) => c.trim());
 
     // Detect separator row (all cells are dashes/colons like ----, :---:, etc.)
-    const isSeparator = (line: string): boolean =>
-      /^\|[\s:|-]+\|$/.test(line);
+    const isSeparator = (line: string): boolean => /^\|[\s:|-]+\|$/.test(line);
 
     const rows: string[][] = [];
     let headers: string[] | null = null;
