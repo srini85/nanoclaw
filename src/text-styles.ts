@@ -304,6 +304,79 @@ function splitProtectedRegions(text: string): Segment[] {
   return segments.length > 0 ? segments : [{ content: text, protected: false }];
 }
 
+/**
+ * Convert Markdown tables to a readable plain-text format.
+ * - Separator rows (|---|---|) are removed.
+ * - If headers exist, data rows become "Header: Value" pairs.
+ * - Falls back to cleaned pipe-delimited rows for complex tables.
+ */
+function convertTables(text: string): string {
+  // Match consecutive lines that start/end with | or have | separators
+  const TABLE_RE = /(?:^|\n)((?:\|[^\n]+\|\n?){2,})/g;
+
+  return text.replace(TABLE_RE, (match, tableBlock: string) => {
+    const lines = tableBlock
+      .trim()
+      .split('\n')
+      .map((l: string) => l.trim());
+
+    // Parse each row into cells
+    const parseRow = (line: string): string[] =>
+      line
+        .replace(/^\||\|$/g, '')
+        .split('|')
+        .map((c: string) => c.trim());
+
+    // Detect separator row (all cells are dashes/colons like ----, :---:, etc.)
+    const isSeparator = (line: string): boolean =>
+      /^\|[\s:|-]+\|$/.test(line);
+
+    const rows: string[][] = [];
+    let headers: string[] | null = null;
+    let foundSeparator = false;
+
+    for (let i = 0; i < lines.length; i++) {
+      if (isSeparator(lines[i])) {
+        // Row before separator is the header
+        if (i === 1 && rows.length === 1) {
+          headers = rows.pop()!;
+        }
+        foundSeparator = true;
+        continue;
+      }
+      rows.push(parseRow(lines[i]));
+    }
+
+    if (!foundSeparator) {
+      // Not actually a table, return as-is
+      return match;
+    }
+
+    // Format output
+    const result: string[] = [];
+    for (const row of rows) {
+      if (headers && headers.length >= row.length) {
+        // Key-value format: "Header: Value, Header: Value"
+        const pairs = row
+          .map((cell, j) => {
+            const header = headers![j] || '';
+            // Skip empty cells
+            if (!cell) return '';
+            return `${header}: ${cell}`;
+          })
+          .filter(Boolean);
+        result.push(pairs.join(' | '));
+      } else {
+        // Just clean up the pipes
+        result.push(row.join(' | '));
+      }
+    }
+
+    const prefix = match.startsWith('\n') ? '\n' : '';
+    return prefix + result.join('\n') + '\n';
+  });
+}
+
 /** Apply marker-substitution transformations to a non-code segment. */
 function transformSegment(text: string, channel: ChannelType): string {
   let t = text;
@@ -321,7 +394,12 @@ function transformSegment(text: string, channel: ChannelType): string {
   t = t.replace(/\*\*(?=[^\s*])([^*]+?)(?<=[^\s*])\*\*/g, '*$1*');
 
   // 3. Headings: ## Title → *Title* (any level, line-start only)
-  t = t.replace(/^#{1,6}\s+(.+)$/gm, '*$1*');
+  //    Strip any bold markers (*text*) from the heading content since the
+  //    heading itself will be bold — avoids nested/broken bold like *some *text**
+  t = t.replace(/^#{1,6}\s+(.+)$/gm, (_match, content: string) => {
+    const stripped = content.replace(/\*([^*]+)\*/g, '$1');
+    return `*${stripped}*`;
+  });
 
   // 4. Links
   if (channel === 'slack') {
@@ -330,7 +408,11 @@ function transformSegment(text: string, channel: ChannelType): string {
     t = t.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1 ($2)');
   }
 
-  // 5. Horizontal rules: strip them
+  // 5. Tables: convert Markdown tables to plain-text rows.
+  //    Header row becomes bold, separator row is stripped, data rows become "Label: Value" pairs.
+  t = convertTables(t);
+
+  // 6. Horizontal rules: strip them
   t = t.replace(/^(-{3,}|\*{3,}|_{3,})$/gm, '');
 
   return t;

@@ -77,9 +77,7 @@ export function parseTokenStats(stderr: string): TokenStats | null {
   const lastLine = lines[lines.length - 1];
 
   // Extract session totals from the last line
-  const sessionMatch = lastLine.match(
-    /session: in=([\d,]+) out=([\d,]+)/,
-  );
+  const sessionMatch = lastLine.match(/session: in=([\d,]+) out=([\d,]+)/);
   if (!sessionMatch) return null;
 
   const inputTokens = parseInt(sessionMatch[1].replace(/,/g, ''), 10);

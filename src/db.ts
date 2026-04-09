@@ -838,9 +838,7 @@ export function getTokenUsageSummary(
     params.push(groupFolder);
   }
 
-  const where = conditions.length
-    ? `WHERE ${conditions.join(' AND ')}`
-    : '';
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
   const row = db
     .prepare(
@@ -908,9 +906,7 @@ export function getRecentTokenUsage(
   limit = 20,
 ): Array<TokenUsageRecord & { id: number; created_at: string }> {
   return db
-    .prepare(
-      `SELECT * FROM token_usage ORDER BY created_at DESC LIMIT ?`,
-    )
+    .prepare(`SELECT * FROM token_usage ORDER BY created_at DESC LIMIT ?`)
     .all(limit) as Array<TokenUsageRecord & { id: number; created_at: string }>;
 }
 

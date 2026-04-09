@@ -481,6 +481,39 @@ describe('parseTextStyles — code block protection', () => {
   });
 });
 
+describe('parseTextStyles — tables', () => {
+  it('converts a simple table to key-value pairs on telegram', () => {
+    const input = [
+      '| Month | AUD | INR |',
+      '|-------|-----|-----|',
+      '| January | $7,500 | ₹4,52,072 |',
+      '| March | $2,000 | ₹1,66,499 |',
+    ].join('\n');
+    const result = parseTextStyles(input, 'telegram');
+    expect(result).toContain('Month: January');
+    expect(result).toContain('AUD: $7,500');
+    expect(result).not.toContain('|----');
+  });
+
+  it('converts tables on whatsapp too', () => {
+    const input = '| Name | Value |\n|------|-------|\n| A | 1 |\n| B | 2 |';
+    const result = parseTextStyles(input, 'whatsapp');
+    expect(result).toContain('Name: A');
+    expect(result).toContain('Value: 2');
+    expect(result).not.toContain('|---');
+  });
+
+  it('leaves tables alone on discord (passthrough)', () => {
+    const input = '| A | B |\n|---|---|\n| 1 | 2 |';
+    expect(parseTextStyles(input, 'discord')).toBe(input);
+  });
+
+  it('does not touch pipe characters inside code blocks', () => {
+    const input = '```\n| A | B |\n|---|---|\n| 1 | 2 |\n```';
+    expect(parseTextStyles(input, 'telegram')).toBe(input);
+  });
+});
+
 // --- parseSignalStyles ---
 
 describe('parseSignalStyles — basic styles', () => {
