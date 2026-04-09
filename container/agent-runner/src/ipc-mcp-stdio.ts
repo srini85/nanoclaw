@@ -370,10 +370,11 @@ When presenting results:
 - Group by run_type or group_folder as needed
 - Format large numbers with commas`,
   {
-    minutes: z.number().optional().describe('Filter to records from the last N minutes. Omit for all available records.'),
+    minutes: z.union([z.number(), z.string()]).optional().describe('Filter to records from the last N minutes. Omit for all available records.'),
   },
   async (args) => {
     const usageFile = path.join(IPC_DIR, 'token_usage.json');
+    const minutes = args.minutes !== undefined ? Number(args.minutes) : undefined;
 
     try {
       if (!fs.existsSync(usageFile)) {
@@ -384,13 +385,13 @@ When presenting results:
       let records = data.records || [];
 
       // Filter by time window if specified
-      if (args.minutes) {
-        const cutoff = new Date(Date.now() - args.minutes * 60 * 1000).toISOString();
+      if (minutes) {
+        const cutoff = new Date(Date.now() - minutes * 60 * 1000).toISOString();
         records = records.filter((r: { created_at: string }) => r.created_at >= cutoff);
       }
 
       if (records.length === 0) {
-        const window = args.minutes ? ` in the last ${args.minutes} minutes` : '';
+        const window = minutes ? ` in the last ${minutes} minutes` : '';
         return { content: [{ type: 'text' as const, text: `No token usage records found${window}.` }] };
       }
 
