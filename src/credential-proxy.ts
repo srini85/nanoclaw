@@ -40,7 +40,9 @@ type CredentialsFile = { claudeAiOauth?: OAuthCreds };
 
 function readCredentialsFile(credentialsPath: string): CredentialsFile | null {
   try {
-    return JSON.parse(fs.readFileSync(credentialsPath, 'utf-8')) as CredentialsFile;
+    return JSON.parse(
+      fs.readFileSync(credentialsPath, 'utf-8'),
+    ) as CredentialsFile;
   } catch {
     return null;
   }
@@ -88,7 +90,10 @@ async function refreshToken(
               expires_in?: number;
             };
             if (!data.access_token) {
-              logger.warn({ status: res.statusCode }, 'OAuth token refresh failed');
+              logger.warn(
+                { status: res.statusCode },
+                'OAuth token refresh failed',
+              );
               resolve(undefined);
               return;
             }
@@ -100,9 +105,13 @@ async function refreshToken(
               refreshToken: data.refresh_token ?? refreshToken,
               expiresAt,
             };
-            fs.writeFileSync(credentialsPath, JSON.stringify(existing, null, 2), {
-              mode: 0o600,
-            });
+            fs.writeFileSync(
+              credentialsPath,
+              JSON.stringify(existing, null, 2),
+              {
+                mode: 0o600,
+              },
+            );
             logger.info(
               { expiresAt: new Date(expiresAt).toISOString() },
               'OAuth token refreshed and saved',
@@ -211,12 +220,14 @@ export function startCredentialProxy(
       req.on('end', () => {
         void (async () => {
           const body = Buffer.concat(chunks);
-          const headers: Record<string, string | number | string[] | undefined> =
-            {
-              ...(req.headers as Record<string, string>),
-              host: upstreamUrl.host,
-              'content-length': body.length,
-            };
+          const headers: Record<
+            string,
+            string | number | string[] | undefined
+          > = {
+            ...(req.headers as Record<string, string>),
+            host: upstreamUrl.host,
+            'content-length': body.length,
+          };
 
           // Strip hop-by-hop headers that must not be forwarded by proxies
           delete headers['connection'];

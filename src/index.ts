@@ -29,6 +29,7 @@ import {
   runContainerAgent,
   writeGroupsSnapshot,
   writeTasksSnapshot,
+  writeTokenUsageSnapshot,
 } from './container-runner.js';
 import {
   cleanupOrphans,
@@ -49,6 +50,7 @@ import {
   setRegisteredGroup,
   setRouterState,
   setSession,
+  getRecentTokenUsage,
   logTokenUsage,
   purgeOldTokenUsage,
   storeChatMetadata,
@@ -385,6 +387,9 @@ async function runAgent(
     availableGroups,
     new Set(Object.keys(registeredGroups)),
   );
+
+  // Write token usage snapshot (last 7 days, up to 500 records)
+  writeTokenUsageSnapshot(group.folder, isMain, getRecentTokenUsage(500));
 
   // Wrap onOutput to track session ID from streamed results
   const wrappedOnOutput = onOutput

@@ -870,6 +870,43 @@ export function writeTasksSnapshot(
   fs.writeFileSync(tasksFile, JSON.stringify(filteredTasks, null, 2));
 }
 
+/**
+ * Write token usage snapshot for the container to read.
+ * Main group sees all usage; non-main groups see only their own.
+ */
+export function writeTokenUsageSnapshot(
+  groupFolder: string,
+  isMain: boolean,
+  records: Array<{
+    group_folder: string;
+    run_type: string;
+    turns: number;
+    input_tokens: number;
+    output_tokens: number;
+    cache_hit_tokens: number;
+    cache_miss_tokens: number;
+    duration_ms: number;
+    created_at: string;
+  }>,
+): void {
+  const groupIpcDir = resolveGroupIpcPath(groupFolder);
+  fs.mkdirSync(groupIpcDir, { recursive: true });
+
+  const filtered = isMain
+    ? records
+    : records.filter((r) => r.group_folder === groupFolder);
+
+  const usageFile = path.join(groupIpcDir, 'token_usage.json');
+  fs.writeFileSync(
+    usageFile,
+    JSON.stringify(
+      { records: filtered, generated_at: new Date().toISOString() },
+      null,
+      2,
+    ),
+  );
+}
+
 export interface AvailableGroup {
   jid: string;
   name: string;

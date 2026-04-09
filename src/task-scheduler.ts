@@ -13,12 +13,14 @@ import {
   parseTokenStats,
   runContainerAgent,
   writeTasksSnapshot,
+  writeTokenUsageSnapshot,
 } from './container-runner.js';
 import {
   getAllTasks,
   getDueTasks,
   getTaskById,
   logTaskRun,
+  getRecentTokenUsage,
   logTokenUsage,
   purgeOldTokenUsage,
   updateTask,
@@ -154,6 +156,9 @@ async function runTask(
       next_run: t.next_run,
     })),
   );
+
+  // Write token usage snapshot
+  writeTokenUsageSnapshot(task.group_folder, isMain, getRecentTokenUsage(500));
 
   let result: string | null = null;
   let error: string | null = null;

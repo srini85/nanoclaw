@@ -360,6 +360,74 @@ Use available_groups.json to find the JID for a group. The folder name must be c
   },
 );
 
+server.tool(
+  'get_token_usage',
+  `Get token usage statistics. Returns recent usage records so you can answer questions like "how many tokens in the last 15 minutes" or "total usage today". Each record has: group_folder, run_type (interactive/scheduled), turns, input_tokens, output_tokens, cache_hit_tokens, cache_miss_tokens, duration_ms, created_at (ISO 8601).
+
+When presenting results:
+- Sum input_tokens + output_tokens for total tokens
+- Use created_at to filter by time window
+- Group by run_type or group_folder as needed
+- Format large numbers with commas`,
+  {
+    minutes: z.number().optional().describe('Filter to records from the last N minutes. Omit for all available records.'),
+  },
+  async (args) => {
+    const usageFile = path.join(IPC_DIR, 'token_usage.json');
+
+    try {
+      if (!fs.existsSync(usageFile)) {
+        return { content: [{ type: 'text' as const, text: 'No token usage data available yet.' }] };
+      }
+
+      const data = JSON.parse(fs.readFileSync(usageFile, 'utf-8'));
+      let records = data.records || [];
+
+      // Filter by time window if specified
+      if (args.minutes) {
+        const cutoff = new Date(Date.now() - args.minutes * 60 * 1000).toISOString();
+        records = records.filter((r: { created_at: string }) => r.created_at >= cutoff);
+      }
+
+      if (records.length === 0) {
+        const window = args.minutes ? ` in the last ${args.minutes} minutes` : '';
+        return { content: [{ type: 'text' as const, text: `No token usage records found${window}.` }] };
+      }
+
+      // Compute summary
+      const summary = {
+        total_runs: records.length,
+        total_input_tokens: 0,
+        total_output_tokens: 0,
+        total_cache_hit_tokens: 0,
+        total_cache_miss_tokens: 0,
+        total_turns: 0,
+        total_duration_ms: 0,
+      };
+
+      for (const r of records) {
+        summary.total_input_tokens += r.input_tokens || 0;
+        summary.total_output_tokens += r.output_tokens || 0;
+        summary.total_cache_hit_tokens += r.cache_hit_tokens || 0;
+        summary.total_cache_miss_tokens += r.cache_miss_tokens || 0;
+        summary.total_turns += r.turns || 0;
+        summary.total_duration_ms += r.duration_ms || 0;
+      }
+
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({ summary, records, generated_at: data.generated_at }, null, 2),
+        }],
+      };
+    } catch (err) {
+      return {
+        content: [{ type: 'text' as const, text: `Error reading token usage: ${err instanceof Error ? err.message : String(err)}` }],
+      };
+    }
+  },
+);
+
 // Start the stdio transport
 const transport = new StdioServerTransport();
 await server.connect(transport);
