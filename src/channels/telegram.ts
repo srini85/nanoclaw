@@ -109,14 +109,21 @@ export async function sendPoolMessage(
   }
 
   const api = poolApis[idx];
+  const numericId = chatId.replace(/^tg:/, '');
+  const sendChunk = async (chunk: string): Promise<void> => {
+    try {
+      await api.sendMessage(numericId, chunk, { parse_mode: 'HTML' });
+    } catch {
+      await api.sendMessage(numericId, chunk);
+    }
+  };
   try {
-    const numericId = chatId.replace(/^tg:/, '');
     const MAX_LENGTH = 4096;
     if (text.length <= MAX_LENGTH) {
-      await api.sendMessage(numericId, text);
+      await sendChunk(text);
     } else {
       for (let i = 0; i < text.length; i += MAX_LENGTH) {
-        await api.sendMessage(numericId, text.slice(i, i + MAX_LENGTH));
+        await sendChunk(text.slice(i, i + MAX_LENGTH));
       }
     }
     logger.info(
@@ -165,8 +172,8 @@ export class TelegramChannel implements Channel {
           : (ctx.chat as any).title || 'Unknown';
 
       ctx.reply(
-        `Chat ID: \`tg:${chatId}\`\nName: ${chatName}\nType: ${chatType}`,
-        { parse_mode: 'Markdown' },
+        `Chat ID: <code>tg:${chatId}</code>\nName: ${chatName}\nType: ${chatType}`,
+        { parse_mode: 'HTML' },
       );
     });
 
@@ -440,19 +447,27 @@ export class TelegramChannel implements Channel {
       return;
     }
 
-    try {
-      const numericId = jid.replace(/^tg:/, '');
+    const numericId = jid.replace(/^tg:/, '');
 
-      // Telegram has a 4096 character limit per message — split if needed
-      const MAX_LENGTH = 4096;
+    // Telegram has a 4096 character limit per message — split if needed
+    const MAX_LENGTH = 4096;
+    const sendChunk = async (chunk: string): Promise<void> => {
+      try {
+        await this.bot!.api.sendMessage(numericId, chunk, {
+          parse_mode: 'HTML',
+        });
+      } catch {
+        // Markdown parse failed (unbalanced markers etc.) — retry as plain text
+        await this.bot!.api.sendMessage(numericId, chunk);
+      }
+    };
+
+    try {
       if (text.length <= MAX_LENGTH) {
-        await this.bot.api.sendMessage(numericId, text);
+        await sendChunk(text);
       } else {
         for (let i = 0; i < text.length; i += MAX_LENGTH) {
-          await this.bot.api.sendMessage(
-            numericId,
-            text.slice(i, i + MAX_LENGTH),
-          );
+          await sendChunk(text.slice(i, i + MAX_LENGTH));
         }
       }
       logger.info({ jid, length: text.length }, 'Telegram message sent');

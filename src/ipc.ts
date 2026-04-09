@@ -10,6 +10,7 @@ import { createTask, deleteTask, getTaskById, updateTask } from './db.js';
 import { isValidGroupFolder } from './group-folder.js';
 import { expandPath } from './mount-security.js';
 import { logger } from './logger.js';
+import { formatOutbound } from './router.js';
 import { RegisteredGroup } from './types.js';
 
 export interface IpcDeps {
@@ -134,12 +135,15 @@ export function startIpcWatcher(deps: IpcDeps): void {
                   (targetGroup && targetGroup.folder === sourceGroup)
                 ) {
                   if (data.sender && data.chatJid.startsWith('tg:')) {
-                    await sendPoolMessage(
-                      data.chatJid,
-                      data.text,
-                      data.sender,
-                      sourceGroup,
-                    );
+                    const formatted = formatOutbound(data.text, 'telegram');
+                    if (formatted) {
+                      await sendPoolMessage(
+                        data.chatJid,
+                        formatted,
+                        data.sender,
+                        sourceGroup,
+                      );
+                    }
                   } else {
                     await deps.sendMessage(data.chatJid, data.text);
                   }
