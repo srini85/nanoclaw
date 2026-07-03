@@ -6,7 +6,13 @@ import { CronExpressionParser } from 'cron-parser';
 import { DATA_DIR, IPC_POLL_INTERVAL, TIMEZONE } from './config.js';
 import { sendPoolMessage } from './channels/telegram.js';
 import { AvailableGroup } from './container-runner.js';
-import { createTask, deleteTask, getTaskById, updateTask } from './db.js';
+import {
+  createTask,
+  deleteTask,
+  getActiveTasksForGroup,
+  getTaskById,
+  updateTask,
+} from './db.js';
 import { isValidGroupFolder } from './group-folder.js';
 import { expandPath } from './mount-security.js';
 import { logger } from './logger.js';
@@ -77,6 +83,13 @@ function resolveContainerPath(
 
   return containerFilePath;
 }
+
+/**
+ * Maximum number of active scheduled tasks a single group may hold. Acts as a
+ * backstop against runaway task-creation loops (e.g. a reminder that keeps
+ * scheduling reworded copies of itself). Legitimate use stays well below this.
+ */
+const MAX_ACTIVE_TASKS_PER_GROUP = 25;
 
 let ipcWatcherRunning = false;
 
@@ -352,6 +365,41 @@ export async function processTaskIpc(
           data.context_mode === 'group' || data.context_mode === 'isolated'
             ? data.context_mode
             : 'isolated';
+
+        // Guard against runaway self-replicating task loops. A recurring
+        // reminder that (incorrectly) creates a fresh copy of itself on every
+        // run grows exponentially and spams the chat. Block creation when an
+        // active task with an identical prompt already exists in the target
+        // group, and cap total active tasks per group as a backstop for
+        // slightly-reworded variants.
+        const activeTasks = getActiveTasksForGroup(targetFolder);
+        const normalizePrompt = (s: string) =>
+          s
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, ' ')
+            .trim();
+        const newPromptNorm = normalizePrompt(data.prompt);
+        if (
+          activeTasks.some((t) => normalizePrompt(t.prompt) === newPromptNorm)
+        ) {
+          logger.warn(
+            { sourceGroup, targetFolder },
+            'Duplicate schedule_task blocked: an active task with an identical prompt already exists',
+          );
+          break;
+        }
+        if (activeTasks.length >= MAX_ACTIVE_TASKS_PER_GROUP) {
+          logger.warn(
+            {
+              sourceGroup,
+              targetFolder,
+              activeCount: activeTasks.length,
+            },
+            'schedule_task blocked: per-group active task ceiling reached',
+          );
+          break;
+        }
+
         createTask({
           id: taskId,
           group_folder: targetFolder,

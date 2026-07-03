@@ -637,6 +637,148 @@ describe('schedule_task context_mode', () => {
   });
 });
 
+// --- runaway task-loop guard ---
+
+describe('schedule_task runaway guard', () => {
+  it('blocks a second active task with an identical prompt', async () => {
+    const req = {
+      type: 'schedule_task',
+      prompt: 'Follow-up reminder: ask Vineet for insurances.',
+      schedule_type: 'interval' as const,
+      schedule_value: '14400000',
+      targetJid: 'other@g.us',
+    };
+
+    await processTaskIpc(req, 'other-group', false, deps);
+    await processTaskIpc(req, 'other-group', false, deps);
+
+    // Only the first creation succeeds; the duplicate is blocked.
+    expect(getAllTasks()).toHaveLength(1);
+  });
+
+  it('treats prompts differing only in whitespace/case as duplicates', async () => {
+    await processTaskIpc(
+      {
+        type: 'schedule_task',
+        prompt: 'Ask Vineet for insurances.',
+        schedule_type: 'once',
+        schedule_value: '2025-06-01T00:00:00',
+        targetJid: 'other@g.us',
+      },
+      'other-group',
+      false,
+      deps,
+    );
+    await processTaskIpc(
+      {
+        type: 'schedule_task',
+        prompt: '  ask   vineet for insurances.\n\n',
+        schedule_type: 'once',
+        schedule_value: '2025-06-02T00:00:00',
+        targetJid: 'other@g.us',
+      },
+      'other-group',
+      false,
+      deps,
+    );
+
+    expect(getAllTasks()).toHaveLength(1);
+  });
+
+  it('allows a distinct prompt in the same group', async () => {
+    await processTaskIpc(
+      {
+        type: 'schedule_task',
+        prompt: 'first distinct task',
+        schedule_type: 'once',
+        schedule_value: '2025-06-01T00:00:00',
+        targetJid: 'other@g.us',
+      },
+      'other-group',
+      false,
+      deps,
+    );
+    await processTaskIpc(
+      {
+        type: 'schedule_task',
+        prompt: 'second distinct task',
+        schedule_type: 'once',
+        schedule_value: '2025-06-01T00:00:00',
+        targetJid: 'other@g.us',
+      },
+      'other-group',
+      false,
+      deps,
+    );
+
+    expect(getAllTasks()).toHaveLength(2);
+  });
+
+  it('caps active tasks per group at the ceiling', async () => {
+    // Pre-seed 25 active tasks (the ceiling) with distinct prompts.
+    for (let i = 0; i < 25; i++) {
+      createTask({
+        id: `seed-${i}`,
+        group_folder: 'other-group',
+        chat_jid: 'other@g.us',
+        prompt: `seed task ${i}`,
+        schedule_type: 'once',
+        schedule_value: '2025-06-01T00:00:00',
+        context_mode: 'isolated',
+        next_run: '2025-06-01T00:00:00.000Z',
+        status: 'active',
+        created_at: '2024-01-01T00:00:00.000Z',
+      });
+    }
+
+    await processTaskIpc(
+      {
+        type: 'schedule_task',
+        prompt: 'one too many',
+        schedule_type: 'once',
+        schedule_value: '2025-06-01T00:00:00',
+        targetJid: 'other@g.us',
+      },
+      'other-group',
+      false,
+      deps,
+    );
+
+    // Ceiling reached — the new task is rejected.
+    expect(getAllTasks()).toHaveLength(25);
+  });
+
+  it('does not count another group toward this group ceiling', async () => {
+    // An identical prompt in a different group must not block creation here.
+    await processTaskIpc(
+      {
+        type: 'schedule_task',
+        prompt: 'shared prompt',
+        schedule_type: 'once',
+        schedule_value: '2025-06-01T00:00:00',
+        targetJid: 'other@g.us',
+      },
+      'whatsapp_main',
+      true,
+      deps,
+    );
+    await processTaskIpc(
+      {
+        type: 'schedule_task',
+        prompt: 'shared prompt',
+        schedule_type: 'once',
+        schedule_value: '2025-06-01T00:00:00',
+        targetJid: 'third@g.us',
+      },
+      'whatsapp_main',
+      true,
+      deps,
+    );
+
+    expect(getAllTasks()).toHaveLength(2);
+  });
+});
+
 // --- register_group success path ---
 
 describe('register_group success', () => {
